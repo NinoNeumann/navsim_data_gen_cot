@@ -33,7 +33,7 @@ def filter_scenes(data_path: Path, scene_filter: SceneFilter) -> Tuple[Dict[str,
     # filter logs
     log_files = list(data_path.iterdir())
     if scene_filter.log_names is not None:
-        log_files = [log_file for log_file in log_files if log_file.name.replace(".pkl", "") in scene_filter.log_names]
+        log_files = [log_file for log_file in log_files if fops.basename(log_file).replace(".pkl", "") in scene_filter.log_names]
 
     if scene_filter.tokens is not None:
         filter_tokens = True
@@ -43,7 +43,7 @@ def filter_scenes(data_path: Path, scene_filter: SceneFilter) -> Tuple[Dict[str,
 
     for log_pickle_path in tqdm(log_files, desc="Loading logs"):
 
-        scene_dict_list = pickle.load(open(log_pickle_path, "rb"))
+        scene_dict_list = pickle.load(fops.open_file(log_pickle_path, "rb"))
         for frame_list in split_list(scene_dict_list, scene_filter.num_frames, scene_filter.frame_interval):
             # Filter scenes which are too short
             if len(frame_list) < scene_filter.num_frames:

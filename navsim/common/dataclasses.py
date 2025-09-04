@@ -685,7 +685,7 @@ class Scene:
         if sensor_config is None:
             sensor_config = SensorConfig.build_no_sensors()
         # Load the metadata
-        with open(file_path, "rb") as f:
+        with fops.open(file_path, "rb") as f:
             scene_data = pickle.load(f)
 
         scene_metadata = SceneMetadata(**scene_data["scene_metadata"])

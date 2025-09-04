@@ -71,7 +71,7 @@ def get_camera_images(scene:Scene, image_root:str):
         camera_frame_l0_paths,
         camera_frame_r0_paths,
         camera_frame_l1_paths,
-        camera_frame_r1_paths
+        camera_frame_r1_paths,
         camera_frame_b0_paths,
         camera_frame_l2_paths,
         camera_frame_r2_paths,

@@ -12,9 +12,9 @@ a = "obs://yw-2030-extern/Partner_Zhu/navsim/navsim-data/sensor_blobs/mini"
 b = "obs://yw-2030-extern/Partner_Zhu/navsim/navsim-data/navsim_logs/mini"
 c = "obs://yw-2030-extern/Partner_Zhu/navsim/navsim-data/maps"
 
-d = "./navsim/maps"
-e = "./navsim/sensor_blobs/mini"
-f = "./navsim/navsim_logs/mini"
+d = "/home/ma-user/work/navsim/maps"
+e = "./home/ma-user/work/navsim/sensor_blobs/mini"
+f = "/home/ma-user/work/navsim/navsim_logs/mini"
 mox.file.copy_parallel(a, e)
 mox.file.copy_parallel(b, f)
 mox.file.copy_parallel(c, d)
