@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import lzma
 import pickle
-from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 from tqdm import tqdm
 
 from navsim.common.dataclasses import AgentInput, Scene, SceneFilter, SensorConfig
 from navsim.planning.metric_caching.metric_cache import MetricCache
+import navsim.common.file_ops as fops
 
 FrameList = List[Dict[str, Any]]
 
