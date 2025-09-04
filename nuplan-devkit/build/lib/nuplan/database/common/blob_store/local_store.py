@@ -38,7 +38,7 @@ class LocalStore(BlobStore):
         """
         path = fops.join(self._root_dir, key)
         try:
-            with fops.open(path, 'rb') as fp:
+            with fops.open_file(path, 'rb') as fp:
                 return io.BytesIO(fp.read())
         except FileNotFoundError as e:
             raise BlobStoreKeyNotFound(e)

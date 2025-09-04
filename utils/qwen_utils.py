@@ -3,7 +3,8 @@ from typing import List, Dict, Any
 from PIL import Image
 import torch
 import numpy as np
-from navsim.common.file_ops import image_open
+import navsim.common.file_ops as fops 
+
 
 
 
@@ -35,9 +36,9 @@ def ask_camera_view(
     # Build images
     pil_images = []
     for img_path in frame_paths:
-        if not os.path.exists(img_path):
+        if not fops.exists(img_path):
             raise FileNotFoundError(f"Image not found: {img_path}")
-        pil_images.append(image_open(frame_paths).convert("RGB"))
+        pil_images.append(fops.image_open(frame_paths).convert("RGB"))
 
     messages = [
         {"role": "system", "content": [{"type": "text", "text": system_prompt}]},
@@ -188,15 +189,15 @@ def pick_dtype(arg: str) -> torch.dtype:
 def get_mulit_dialogs(
         model,
         processor,
-        canera_order,
+        camera_order,
         multi_frame_paths,
         navigation_info,
         object_position_info,
 ):
     answers_by_view: Dict[str, Dict[str, str]] = {}
 
-    for frame_paths, camera_type in zip(multi_frame_paths, canera_order):
-        result = ask_camera_view(camera_type, frame_paths)
+    for frame_paths, camera_type in zip(multi_frame_paths, camera_order):
+        result = ask_camera_view(camera_type, frame_paths, model=model, processor=processor)
         answers_by_view[camera_type] = result
     
     # debug info

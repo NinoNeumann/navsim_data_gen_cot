@@ -23,6 +23,7 @@ def init_scene_loader(
     num_fut_frame:int,
     max_scenes:int = None,
     data_type:str = "mini",
+    frame_interval:int = None
 ):
     
     navsim_logs_path = fops.join(data_root,"navsim_logs", data_type)
@@ -32,6 +33,7 @@ def init_scene_loader(
         max_scenes=max_scenes,
         num_history_frames=num_hist_frame,
         num_future_frames=num_fut_frame,
+        frame_interval=frame_interval,
     )
     scenes_loader = SceneLoader(
         data_path=navsim_logs_path,
@@ -56,14 +58,15 @@ def get_camera_images(scene:Scene, image_root:str, frame_num:int):
 
     for frame_camera in agentInput.cameras[:frame_num]:
         # 根据相机类型添加到对应的路径列表
-        camera_frame_f0_paths.append(os.path.join(image_root, frame_camera.cam_f0.camera_path))
-        camera_frame_l0_paths.append(os.path.join(image_root, frame_camera.cam_l0.camera_path))
-        camera_frame_r0_paths.append(os.path.join(image_root, frame_camera.cam_r0.camera_path))
-        camera_frame_l1_paths.append(os.path.join(image_root, frame_camera.cam_l1.camera_path))
-        camera_frame_r1_paths.append(os.path.join(image_root, frame_camera.cam_r1.camera_path))
-        camera_frame_b0_paths.append(os.path.join(image_root, frame_camera.cam_b0.camera_path))
-        camera_frame_l2_paths.append(os.path.join(image_root, frame_camera.cam_l2.camera_path))
-        camera_frame_r2_paths.append(os.path.join(image_root, frame_camera.cam_r2.camera_path))
+        print(frame_camera.cam_f0.camera_path)
+        camera_frame_f0_paths.append(fops.join(image_root, frame_camera.cam_f0.camera_path))
+        camera_frame_l0_paths.append(fops.join(image_root, frame_camera.cam_l0.camera_path))
+        camera_frame_r0_paths.append(fops.join(image_root, frame_camera.cam_r0.camera_path))
+        camera_frame_l1_paths.append(fops.join(image_root, frame_camera.cam_l1.camera_path))
+        camera_frame_r1_paths.append(fops.join(image_root, frame_camera.cam_r1.camera_path))
+        camera_frame_b0_paths.append(fops.join(image_root, frame_camera.cam_b0.camera_path))
+        camera_frame_l2_paths.append(fops.join(image_root, frame_camera.cam_l2.camera_path))
+        camera_frame_r2_paths.append(fops.join(image_root, frame_camera.cam_r2.camera_path))
 
     return [
         camera_frame_f0_paths,

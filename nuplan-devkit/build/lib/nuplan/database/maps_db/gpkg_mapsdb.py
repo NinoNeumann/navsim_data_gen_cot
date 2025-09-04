@@ -22,6 +22,8 @@ from nuplan.database.maps_db.imapsdb import IMapsDB
 from nuplan.database.maps_db.layer import MapLayer
 from nuplan.database.maps_db.metadata import MapLayerMeta
 
+import navsim.common.file_ops as fops
+
 logger = logging.getLogger(__name__)
 
 # To silence NotGeoreferencedWarning
@@ -214,11 +216,11 @@ class GPKGMapsDB(IMapsDB):
 
             time.sleep(self._seconds_between_attempts)
 
-        if os.path.getsize(path_on_disk) != map_file_size:
+        if fops.getsize(path_on_disk) != map_file_size:
             raise GPKGMapsDBException(
                 f"Waited {self._max_attempts * self._seconds_between_attempts} seconds for "
                 f"file {path_on_disk} to reach {map_file_size}, "
-                f"but size is now {os.path.getsize(path_on_disk)}"
+                f"but size is now {fops.getsize(path_on_disk)}"
             )
 
     def _safe_save_layer(self, layer_lock_file: str, file_path: str) -> None:
@@ -227,7 +229,7 @@ class GPKGMapsDB(IMapsDB):
         :param layer_lock_file: Path to lock file.
         :param file_path: Path of the file being downloaded.
         """
-        fd = open(layer_lock_file, 'w')
+        fd = fops.open_file(layer_lock_file, 'w')
         try:
             fcntl.flock(fd, fcntl.LOCK_EX)
             _ = self._blob_store.save_to_disk(file_path, check_for_compressed=True)
@@ -244,9 +246,9 @@ class GPKGMapsDB(IMapsDB):
         location = location.replace('.gpkg', '')
 
         rel_path = self._get_gpkg_file_path(location)
-        path_on_disk = os.path.join(self._map_root, rel_path)
+        path_on_disk = fops.join(self._map_root, rel_path)
 
-        if not os.path.exists(path_on_disk):
+        if not fops.exists(path_on_disk):
             layer_lock_file = f'{self._map_lock_dir}/{location}_{layer_name}.lock'
             self._safe_save_layer(layer_lock_file, rel_path)
         self._wait_for_expected_filesize(path_on_disk, location)

@@ -192,3 +192,32 @@ def isfile(p: PathLike) -> bool:
         # must exist and not be a directory
         return mox.file.exists(s) and not mox.file.is_directory(s)
     return Path(s).is_file()
+
+def makedirs(p: PathLike, exist_ok: bool = True) -> None:
+    """
+    Create a directory (and parents if needed).
+    - Local: same as os.makedirs(..., exist_ok=...)
+    - Remote: uses mox.file.make_dirs
+    """
+    s = str(p)
+    if _is_remote(s):
+        if not _HAS_MOX:
+            raise RuntimeError("moxing not installed.")
+        if mox.file.exists(s):
+            if not exist_ok:
+                raise FileExistsError(f"Remote path already exists: {s}")
+            return
+        mox.file.make_dirs(s)
+    else:
+        Path(s).mkdir(parents=True, exist_ok=exist_ok)
+
+def getsize(p: PathLike) -> int:
+    """
+    Return the size of a file in bytes (local or remote).
+    """
+    s = str(p)
+    if _is_remote(s):
+        if not _HAS_MOX:
+            raise RuntimeError("moxing not installed.")
+        return int(mox.file.get_size(s))
+    return Path(s).stat().st_size

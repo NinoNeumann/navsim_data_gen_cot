@@ -120,11 +120,11 @@ parser = HfArgumentParser((ModelArguments, DataArguments))
 def main():
     model_args, data_args = parser.parse_args_into_dataclasses()
 
-    import debugpy
-    debugpy.listen(5678)  # 5678 is port
-    print("Waiting for debugger attach")
-    debugpy.wait_for_client()
-    debugpy.breakpoint()
+    # import debugpy
+    # debugpy.listen(5678)  # 5678 is port
+    # print("Waiting for debugger attach")
+    # debugpy.wait_for_client()
+    # debugpy.breakpoint()
 
     rank = int(data_args.rank_idx)
     world = int(data_args.world_size)
@@ -190,23 +190,25 @@ def main():
     global_idx = 0  # same ordering across ranks
     per_rank_cap = data_args.max_entries if data_args.max_entries >= 0 else None
 
-    tokens = sorted(list(scene_loader.tokens))
-
+    # tokens = sorted(list(scene_loader.tokens))
+    tokens = list(scene_loader.tokens)
     pbar_tokens = tqdm(tokens, desc=f"[rank {rank}/{world}] Scenes", position=0)
 
     for token in pbar_tokens:
         if (global_idx % world) != rank:
             global_idx += 1
             continue
+        
         print(f"==========token:{token}==========")
         scene = scene_loader.get_scene_from_token(token)
+        print("scene", scene)
         hist_traj, fut_traj = get_history_future_trajs(scene)
         navigation_info, _ = get_history_navigation_infomation(scene)
         object_position_info = get_object_position(scene)
         # scene_images = get_camera_images(scene, image_root=image_root) # shape:(camera, frames)
         obs_images = get_camera_images(scene, image_root=obs_root, frame_num=num_hist_traj) # shape:(camera, frames)
         image_for_save = get_camera_images(scene, image_root=obs_root, frame_num=num_hist_frames)
-
+        print(obs_images)
         full_image_paths = []
         for camera_images in image_for_save:
             for camera_image in camera_images:

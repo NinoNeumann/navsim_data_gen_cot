@@ -1,10 +1,15 @@
 #!/bin/bash
 set -e
 
+export S3_ENDPOINT=https://obs.cn-southwest-2.huaweicloud.com
+export S3_USE_HHTPS=0
+export ACCESS_KEY_ID=HPUAUMBABND5R21BA8CR
+export SECRET_ACCESS_KEY=GPs3Ag6ahEpm]rEZZmb9bOUlWaCHBVVLYR1rONSV
+
 # Path to your Python script
 PY_SCRIPT="qwen_cot_generate.py"
 
-export NUPLAN_MAPS_ROOT=obs://yw-2030-extern/Partner_Zhu/navsim/navsim-data/maps
+export NUPLAN_MAPS_ROOT=/home/ma-user/work/navsim/maps
 
 # Common args for all ranks
 NAV_ROOT="obs://yw-2030-extern/Partner_Zhu/navsim/navsim-data/"
