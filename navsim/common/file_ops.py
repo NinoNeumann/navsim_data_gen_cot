@@ -4,7 +4,7 @@ from pathlib import Path
 import json
 import posixpath
 from urllib.parse import urlsplit, urlunsplit
-
+import os
 try:
     import moxing as mox
     _HAS_MOX = True
@@ -133,3 +133,62 @@ def image_open(p: PathLike):
     except Exception:
         f.close()
         raise
+
+def access(p: PathLike, mode: int = os.R_OK) -> bool:
+    """
+    Check if a path can be accessed with the given mode flags.
+    Supported flags: os.R_OK, os.W_OK, os.X_OK (can be combined).
+    
+    - Local: delegates to os.access
+    - Remote: simulates using mox.file.* capabilities
+    """
+    s = str(p)
+    if _is_remote(s):
+        if not _HAS_MOX:
+            raise RuntimeError("moxing not installed.")
+
+        # Check existence first
+        if not mox.file.exists(s):
+            return False
+
+        # Remote storages don't really have POSIX perms.
+        # We approximate:
+        # - R_OK → can list dir or open file
+        # - X_OK → dir is "enterable" (listable)
+        # - W_OK → always assume True if object exists (since API allows writes)
+        ok = True
+        if mode & os.R_OK:
+            if mox.file.is_directory(s):
+                try:
+                    mox.file.list_directory(s)
+                except Exception:
+                    ok = False
+            else:
+                try:
+                    with mox.file.File(s, "rb") as f:
+                        f.read(1)
+                except Exception:
+                    ok = False
+        if mode & os.X_OK:
+            if not mox.file.is_directory(s):
+                ok = False
+        if mode & os.W_OK:
+            # Conservative: allow if it exists; remote APIs typically allow write
+            ok = ok and True
+        return ok
+
+    # local fallback
+    return os.access(s, mode)
+
+
+def isfile(p: PathLike) -> bool:
+    """
+    Check if path is a regular file (local or remote).
+    """
+    s = str(p)
+    if _is_remote(s):
+        if not _HAS_MOX:
+            raise RuntimeError("moxing not installed.")
+        # must exist and not be a directory
+        return mox.file.exists(s) and not mox.file.is_directory(s)
+    return Path(s).is_file()

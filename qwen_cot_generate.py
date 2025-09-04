@@ -96,6 +96,7 @@ class DataArguments:
     max_pixels: int = field(default=1280 * 28 * 28)
     num_hist_traj: int = field(default=4)
     num_fut_traj: int = field(default=6)
+    num_hist_frames: int = field(default=4, metadata={"help": "Number of frames to use in the question (should be <= num_hist_traj)"})
     max_scenes: int = field(default=None)
     data_type: str = field(default="mini")
 
@@ -107,6 +108,7 @@ class DataArguments:
     # NEW: sharding across ranks
     rank_idx: int = field(default=0, metadata={"help": "This process's rank index [0..world_size-1]."})
     world_size: int = field(default=1, metadata={"help": "Total number of ranks."})
+    max_entries: int = field(default=-1, metadata={"help": "Total number of entries."})
 
 
 parser = HfArgumentParser((ModelArguments, DataArguments))
@@ -117,6 +119,12 @@ parser = HfArgumentParser((ModelArguments, DataArguments))
 
 def main():
     model_args, data_args = parser.parse_args_into_dataclasses()
+
+    import debugpy
+    debugpy.listen(5678)  # 5678 is port
+    print("Waiting for debugger attach")
+    debugpy.wait_for_client()
+    debugpy.breakpoint()
 
     rank = int(data_args.rank_idx)
     world = int(data_args.world_size)
@@ -130,9 +138,10 @@ def main():
     max_pixels = data_args.max_pixels
 
     # navsim
-    navsim_root = Path(data_args.nav_root)
+    navsim_root = data_args.nav_root
     num_hist_traj = data_args.num_hist_traj
     num_fut_traj = data_args.num_fut_traj
+    num_hist_frames = data_args.num_hist_frames
     data_type = data_args.data_type
 
     # vis
@@ -142,6 +151,11 @@ def main():
     # path prefix
     image_root = Path(data_args.image_root)
     obs_root = data_args.obs_root
+
+    # Validate num_hist_frames
+    if num_hist_frames > num_hist_traj:
+        print(f"Warning: num_hist_frames ({num_hist_frames}) > num_hist_traj ({num_hist_traj}). Setting num_hist_frames to {num_hist_traj}")
+        num_hist_frames = num_hist_traj
 
     # If running multi-rank and user didn't include a placeholder, auto-suffix.
     if world > 1 and "{rank}" not in out_path.name:
@@ -190,10 +204,11 @@ def main():
         navigation_info, _ = get_history_navigation_infomation(scene)
         object_position_info = get_object_position(scene)
         # scene_images = get_camera_images(scene, image_root=image_root) # shape:(camera, frames)
-        obs_images = get_camera_images(scene, image_root=obs_root) # shape:(camera, frames)
+        obs_images = get_camera_images(scene, image_root=obs_root, frame_num=num_hist_traj) # shape:(camera, frames)
+        image_for_save = get_camera_images(scene, image_root=obs_root, frame_num=num_hist_frames)
 
         full_image_paths = []
-        for camera_images in obs_images:
+        for camera_images in image_for_save:
             for camera_image in camera_images:
                 full_image_paths.append(camera_image)
 
@@ -209,14 +224,14 @@ def main():
 
         input_Q = (
             f"Here are {len(data_args.camera_order)} consecutive frames of 6 surrounding onboard camera views from a vehicle:\n"
-            f"Front camera: {[f'frame{i}<image>' for i in range(num_hist_traj)]}"
-            f"Front Left camera: {[f'frame{i}<image>' for i in range(num_hist_traj)]}"
-            f"Front Right camera: {[f'frame{i}<image>' for i in range(num_hist_traj)]}"
-            f"Left camera: {[f'frame{i}<image>' for i in range(num_hist_traj)]}"
-            f"Right camera: {[f'frame{i}<image>' for i in range(num_hist_traj)]}"
-            f"Back camera: {[f'frame{i}<image>' for i in range(num_hist_traj)]}"
-            f"Back Left camera: {[f'frame{i}<image>' for i in range(num_hist_traj)]}"
-            f"Back Right camera: {[f'frame{i}<image>' for i in range(num_hist_traj)]}"
+            f"Front camera: {[f'frame{i}<image>' for i in range(num_hist_frames)]}"
+            f"Front Left camera: {[f'frame{i}<image>' for i in range(num_hist_frames)]}"
+            f"Front Right camera: {[f'frame{i}<image>' for i in range(num_hist_frames)]}"
+            f"Left camera: {[f'frame{i}<image>' for i in range(num_hist_frames)]}"
+            f"Right camera: {[f'frame{i}<image>' for i in range(num_hist_frames)]}"
+            f"Back camera: {[f'frame{i}<image>' for i in range(num_hist_frames)]}"
+            f"Back Left camera: {[f'frame{i}<image>' for i in range(num_hist_frames)]}"
+            f"Back Right camera: {[f'frame{i}<image>' for i in range(num_hist_frames)]}"
             f"\nThe navigation information is: {navigation_info}"
             f"\nThe history trajectory is: {to_traj_string(hist_traj)}"
             f"Predict the optimal driving action for the next 4 seconds with 8 new waypoints."

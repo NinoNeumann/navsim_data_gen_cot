@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import BinaryIO, Tuple, Type
 
 from nuplan.database.common.blob_store.blob_store import BlobStore, BlobStoreKeyNotFound
-
+import navsim.common.file_ops as fops
 
 class LocalStore(BlobStore):
     """
@@ -19,8 +19,8 @@ class LocalStore(BlobStore):
         :param root_dir: Root directory containing the data.
         """
         self._root_dir = root_dir
-        assert os.path.isdir(self._root_dir), '%s does not exist!' % self._root_dir
-        assert os.access(self._root_dir, os.R_OK | os.X_OK), 'can not read from %s' % self._root_dir
+        assert fops.isdir(self._root_dir), '%s does not exist!' % self._root_dir
+        assert fops.access(self._root_dir, os.R_OK | os.X_OK), 'can not read from %s' % self._root_dir
 
     def __reduce__(self) -> Tuple[Type[LocalStore], Tuple[str]]:
         """
@@ -36,9 +36,9 @@ class LocalStore(BlobStore):
         :raises: BlobStoreKeyNotFound is `key` is not present in backing store.
         :return: A file-like object, use read() to get raw bytes.
         """
-        path = os.path.join(self._root_dir, key)
+        path = fops.join(self._root_dir, key)
         try:
-            with open(path, 'rb') as fp:
+            with fops.open(path, 'rb') as fp:
                 return io.BytesIO(fp.read())
         except FileNotFoundError as e:
             raise BlobStoreKeyNotFound(e)
@@ -63,8 +63,8 @@ class LocalStore(BlobStore):
         :param key: blob path or token.
         :return: True if the blob exists else False.
         """
-        path = os.path.join(self._root_dir, key)
-        return os.path.isfile(path)
+        path = fops.join(self._root_dir, key)
+        return fops.isfile(path)
 
     def put(self, key: str, value: BinaryIO) -> None:
         """
@@ -72,11 +72,11 @@ class LocalStore(BlobStore):
         :param key: Blob path or token.
         :param value: Data to save.
         """
-        if not os.access(self._root_dir, os.W_OK):
+        if not fops.access(self._root_dir, os.W_OK):
             raise RuntimeError(f"No write access to {self._root_dir}")
 
-        path = Path(self._root_dir) / key
-        path.parent.mkdir(parents=True, exist_ok=True)
+        path = fops.join(self._root_dir, key)
+        # path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(path, 'wb') as f:
+        with fops.open(path, 'wb') as f:
             f.write(value.read())

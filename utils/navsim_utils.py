@@ -42,7 +42,7 @@ def init_scene_loader(
     return scenes_loader
 
 
-def get_camera_images(scene:Scene, image_root:str):
+def get_camera_images(scene:Scene, image_root:str, frame_num:int):
     agentInput = scene.get_agent_input()
 
     camera_frame_f0_paths = []
@@ -54,16 +54,16 @@ def get_camera_images(scene:Scene, image_root:str):
     camera_frame_l2_paths = []
     camera_frame_r2_paths = []
 
-    for frame_camera in agentInput.cameras:
+    for frame_camera in agentInput.cameras[:frame_num]:
         # 根据相机类型添加到对应的路径列表
-        camera_frame_f0_paths.append(fops.join(image_root, frame_camera.cam_f0.camera_path))
-        camera_frame_l0_paths.append(fops.join(image_root, frame_camera.cam_l0.camera_path))
-        camera_frame_r0_paths.append(fops.join(image_root, frame_camera.cam_r0.camera_path))
-        camera_frame_l1_paths.append(fops.join(image_root, frame_camera.cam_l1.camera_path))
-        camera_frame_r1_paths.append(fops.join(image_root, frame_camera.cam_r1.camera_path))
-        camera_frame_b0_paths.append(fops.join(image_root, frame_camera.cam_b0.camera_path))
-        camera_frame_l2_paths.append(fops.join(image_root, frame_camera.cam_l2.camera_path))
-        camera_frame_r2_paths.append(fops.join(image_root, frame_camera.cam_r2.camera_path))
+        camera_frame_f0_paths.append(os.path.join(image_root, frame_camera.cam_f0.camera_path))
+        camera_frame_l0_paths.append(os.path.join(image_root, frame_camera.cam_l0.camera_path))
+        camera_frame_r0_paths.append(os.path.join(image_root, frame_camera.cam_r0.camera_path))
+        camera_frame_l1_paths.append(os.path.join(image_root, frame_camera.cam_l1.camera_path))
+        camera_frame_r1_paths.append(os.path.join(image_root, frame_camera.cam_r1.camera_path))
+        camera_frame_b0_paths.append(os.path.join(image_root, frame_camera.cam_b0.camera_path))
+        camera_frame_l2_paths.append(os.path.join(image_root, frame_camera.cam_l2.camera_path))
+        camera_frame_r2_paths.append(os.path.join(image_root, frame_camera.cam_r2.camera_path))
 
     return [
         camera_frame_f0_paths,
