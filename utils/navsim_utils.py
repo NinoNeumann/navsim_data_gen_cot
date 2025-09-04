@@ -1,7 +1,5 @@
 
 import os
-import torch
-from pathlib import Path
 import numpy as np
 from collections import Counter
 from typing import Tuple
@@ -24,7 +22,7 @@ def init_scene_loader(
     num_hist_frame:int,
     num_fut_frame:int,
     max_scenes:int = None,
-    data_type:str = "trainval",
+    data_type:str = "mini",
 ):
     
     navsim_logs_path = fops.join(data_root,"navsim_logs", data_type)
@@ -58,14 +56,14 @@ def get_camera_images(scene:Scene, image_root:str):
 
     for frame_camera in agentInput.cameras:
         # 根据相机类型添加到对应的路径列表
-        camera_frame_f0_paths.append(os.path.join(image_root, frame_camera.cam_f0.camera_path))
-        camera_frame_l0_paths.append(os.path.join(image_root, frame_camera.cam_l0.camera_path))
-        camera_frame_r0_paths.append(os.path.join(image_root, frame_camera.cam_r0.camera_path))
-        camera_frame_l1_paths.append(os.path.join(image_root, frame_camera.cam_l1.camera_path))
-        camera_frame_r1_paths.append(os.path.join(image_root, frame_camera.cam_r1.camera_path))
-        camera_frame_b0_paths.append(os.path.join(image_root, frame_camera.cam_b0.camera_path))
-        camera_frame_l2_paths.append(os.path.join(image_root, frame_camera.cam_l2.camera_path))
-        camera_frame_r2_paths.append(os.path.join(image_root, frame_camera.cam_r2.camera_path))
+        camera_frame_f0_paths.append(fops.join(image_root, frame_camera.cam_f0.camera_path))
+        camera_frame_l0_paths.append(fops.join(image_root, frame_camera.cam_l0.camera_path))
+        camera_frame_r0_paths.append(fops.join(image_root, frame_camera.cam_r0.camera_path))
+        camera_frame_l1_paths.append(fops.join(image_root, frame_camera.cam_l1.camera_path))
+        camera_frame_r1_paths.append(fops.join(image_root, frame_camera.cam_r1.camera_path))
+        camera_frame_b0_paths.append(fops.join(image_root, frame_camera.cam_b0.camera_path))
+        camera_frame_l2_paths.append(fops.join(image_root, frame_camera.cam_l2.camera_path))
+        camera_frame_r2_paths.append(fops.join(image_root, frame_camera.cam_r2.camera_path))
 
     return [
         camera_frame_f0_paths,
@@ -78,12 +76,48 @@ def get_camera_images(scene:Scene, image_root:str):
         camera_frame_r2_paths,
     ]
 
-#TODO to finish
-def get_object_grounding(scene:Scene):
-    start_frame_idx = scene.frames[start_frame_idx]
-    current_frame_annotations = current_frame.annotations
+def get_object_position(scene:Scene):
+    start_frame_idx = scene.scene_metadata.num_history_frames - 1
+    current_frame = scene.frames[start_frame_idx]
 
-    pass
+    current_frame_annotations = current_frame.annotations
+    object_names = current_frame_annotations.names
+    object_boxes = current_frame_annotations.boxes
+    
+    # 获取自车在当前帧的位置（自车在ego坐标系中位置为(0,0)）
+    ego_position = np.array([0.0, 0.0])
+    
+    # 创建结果列表
+    object_info_list = []
+    
+    for i, (name, box) in enumerate(zip(object_names, object_boxes)):
+        # 获取物体在ego坐标系中的位置 (X, Y)
+        object_pos = box[:2]  # 取前两个元素作为X, Y坐标
+        
+        # 计算相对于自车的位置
+        relative_position = object_pos - ego_position
+        
+        # 获取物体的其他信息
+        object_length = box[3]  # LENGTH
+        object_width = box[4]   # WIDTH
+        object_height = box[5]  # HEIGHT
+        object_heading = box[6] # HEADING
+        
+        # 计算距离
+        distance = np.linalg.norm(relative_position)
+        
+        # 创建物体信息字典
+        object_info = {
+            'name': name,
+            'relative_position': relative_position.tolist(),  # [x, y] 相对于自车的位置
+            'distance': float(distance),                     # 距离自车的欧几里得距离
+            'dimensions': [float(object_length), float(object_width), float(object_height)],  # [长, 宽, 高]
+            'heading': float(object_heading),                # 朝向角度（弧度）
+        }
+        
+        object_info_list.append(object_info)
+    
+    return object_info_list
 
 
 def map_command_to_direction(command: np.ndarray) -> str:

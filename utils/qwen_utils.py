@@ -2,38 +2,10 @@ import os
 from typing import List, Dict, Any
 from PIL import Image
 import torch
-from transformers import AutoProcessor, AutoModelForCausalLM
+import numpy as np
+from navsim.common.file_ops import image_open
 
 
-def get_mulit_dialogs():
-    pass
-
-
-def _get_dtype() -> torch.dtype:
-    mapping = {
-        "float16": torch.float16,
-        "bfloat16": torch.bfloat16,
-        "float32": torch.float32,
-    }
-    return mapping.get(DTYPE_STR, torch.bfloat16)
-
-
-def load_model_and_processor(
-    model_path:str
-) -> Any:
-    global _model, _processor
-    if _model is not None and _processor is not None:
-        return _model, _processor
-    device_map = "auto"
-    dtype = _get_dtype()
-    _processor = AutoProcessor.from_pretrained(model_path, trust_remote_code=True)
-    _model = AutoModelForCausalLM.from_pretrained(
-        model_path,
-        device_map=device_map,
-        torch_dtype=dtype,
-        trust_remote_code=True,
-    ).eval()
-    return _model, _processor
 
 
 def ask_camera_view(
@@ -65,7 +37,7 @@ def ask_camera_view(
     for img_path in frame_paths:
         if not os.path.exists(img_path):
             raise FileNotFoundError(f"Image not found: {img_path}")
-        pil_images.append(Image.open(img_path).convert("RGB"))
+        pil_images.append(image_open(frame_paths).convert("RGB"))
 
     messages = [
         {"role": "system", "content": [{"type": "text", "text": system_prompt}]},
@@ -117,21 +89,63 @@ def ask_camera_view(
 def summarize_across_views(
     answers_by_view: Dict[str, Dict[str, str]],
     model,
-    processor
+    processor,
+    navigation_info,
+    object_position_info,
 ) -> str:
     """
     Aggregate six-view answers and ask model for a final combined response
     to the three questions (environment, key objects, decision notes).
     """
+    
+    # 构建物体位置信息的描述
+    object_position_text = ""
+    if object_position_info:
+        object_position_text = "\n\nObject positions relative to ego vehicle (BEV perspective):\n"
+        for obj in object_position_info:
+            name = obj['name']
+            rel_pos = obj['relative_position']
+            distance = obj['distance']
+            heading = obj['heading']
+            
+            # 将弧度转换为度数，便于理解
+            heading_deg = np.degrees(heading)
+            
+            # 根据相对位置描述方向
+            x, y = rel_pos
+            if abs(x) < 2 and abs(y) < 2:
+                direction = "very close"
+            elif x > 0 and y > 0:
+                direction = "front-right"
+            elif x > 0 and y < 0:
+                direction = "front-left"
+            elif x < 0 and y > 0:
+                direction = "rear-right"
+            elif x < 0 and y < 0:
+                direction = "rear-left"
+            elif x > 0:
+                direction = "front"
+            elif x < 0:
+                direction = "rear"
+            elif y > 0:
+                direction = "right"
+            else:
+                direction = "left"
+            
+            object_position_text += f"- <obj>{name}</obj>: {direction}, distance {distance:.1f}m, heading {heading_deg:.1f}°\n"
+    
     system_prompt = (
         "You are a visual summarization assistant in the field of intelligent driving. Now providing answers from six perspectives "
         "in three categories: (1) Environment description, (2) Key objects, (3) Decision points. "
+        f"The navigation information is: {navigation_info}"
+        f"{object_position_text}"
         "Please synthesize them comprehensively, avoid repetition and redundancy, and output the final three sections:\n"
         "1. Environment description (concise, fact-based)\n"
-        "2. Key objects (condensed by category or priority)\n"
-        "3. Decision points (driving strategy-oriented key points)\n\n"
+        "2. Key objects (condensed by category or priority, incorporating position information)\n"
+        "3. Decision points (driving strategy-oriented key points, considering object positions and navigation)\n\n"
         "IMPORTANT: When describing traffic-related objects (vehicles, pedestrians, traffic signs, traffic lights, road markings, etc.), "
-        "always wrap them with <obj></obj> tags. For example: <obj>car</obj>, <obj>traffic light</obj>, <obj>pedestrian</obj>."
+        "always wrap them with <obj></obj> tags. For example: <obj>car</obj>, <obj>traffic light</obj>, <obj>pedestrian</obj>. "
+        "When mentioning object positions, use the relative position information provided above to give spatial context."
     )
 
     # Build a single user message that lists per-view answers
@@ -171,48 +185,30 @@ def pick_dtype(arg: str) -> torch.dtype:
 
 
 
-
-def main():
-    # Example expected directory structure:
-    # data/
-    #   front/
-    #     frame_0.jpg ... frame_3.jpg
-    #   front-right/
-    #   front-left/
-    #   back/
-    #   back-right/
-    #   back-left/
-    base_dir = os.getenv("DATA_DIR", os.path.join(os.getcwd(), "data"))
-
-    camera_to_subdir = {
-        "front": "front",
-        "front-right": "front-right",
-        "front-left": "front-left",
-        "back": "back",
-        "back-right": "back-right",
-        "back-left": "back-left",
-    }
-
+def get_mulit_dialogs(
+        model,
+        processor,
+        canera_order,
+        multi_frame_paths,
+        navigation_info,
+        object_position_info,
+):
     answers_by_view: Dict[str, Dict[str, str]] = {}
 
-    for camera, subdir in camera_to_subdir.items():
-        view_dir = os.path.join(base_dir, subdir)
-        frame_paths = [os.path.join(view_dir, f"frame_{i}.jpg") for i in range(4)]
-        try:
-            result = ask_camera_view(camera, frame_paths)
-        except Exception as e:
-            print(f"[{camera}] Processing failed: {e}")
-            continue
-
-        answers_by_view[camera] = result
-
-        print(f"\n===== View: {camera} =====")
-        print("Question 1: Environment description:")
-        print(result["environment"]) 
-        print("\nQuestion 2: Key objects:")
-        print(result["key_objects"]) 
-        print("\nQuestion 3: Decision points:")
-        print(result["decision_notes"]) 
+    for frame_paths, camera_type in zip(multi_frame_paths, canera_order):
+        result = ask_camera_view(camera_type, frame_paths)
+        answers_by_view[camera_type] = result
+    
+    # debug info
+    print(f"=======view:{camera_type}=======")
+    print(f"Environment description: {result['environment']}")
+    print(f"Key objects: {result['key_objects']}")
+    print(f"Decision points: {result['decision_notes']}")
+    print(f"=================================")
 
     if answers_by_view:
-        s
+        summary = summarize_across_views(answers_by_view, model, processor, navigation_info, object_position_info)
+        print(f"Summary: {summary}")
+    
+    return summary, answers_by_view
+

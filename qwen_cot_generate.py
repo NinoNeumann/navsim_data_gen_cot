@@ -15,7 +15,8 @@ from utils.navsim_utils import (
     get_camera_images,
     to_traj_string,
     get_history_future_trajs,
-    get_history_navigation_infomation
+    get_history_navigation_infomation,
+    get_object_position
 
 )
 
@@ -101,9 +102,8 @@ class DataArguments:
     image_root: str = field(default="./images")
     obs_root: str = field(default="obs://yw-2030-extern/Partner_Zhu/navsim/navsim-data")
 
-    traj_steps: int = field(default=8)
-
     vis_path: str = field(default="./visual")
+    if_vis: bool = field(default=False)
     # NEW: sharding across ranks
     rank_idx: int = field(default=0, metadata={"help": "This process's rank index [0..world_size-1]."})
     world_size: int = field(default=1, metadata={"help": "Total number of ranks."})
@@ -135,11 +135,13 @@ def main():
     num_fut_traj = data_args.num_fut_traj
     data_type = data_args.data_type
 
+    # vis
+    vis_path = Path(data_args.vis_path)
+    if_vis = data_args.if_vis
+
     # path prefix
     image_root = Path(data_args.image_root)
     obs_root = data_args.obs_root
-
-
 
     # If running multi-rank and user didn't include a placeholder, auto-suffix.
     if world > 1 and "{rank}" not in out_path.name:
@@ -186,7 +188,8 @@ def main():
         scene = scene_loader.get_scene_from_token(token)
         hist_traj, fut_traj = get_history_future_trajs(scene)
         navigation_info, _ = get_history_navigation_infomation(scene)
-        scene_images = get_camera_images(scene, image_root=image_root) # shape:(camera, frames)
+        object_position_info = get_object_position(scene)
+        # scene_images = get_camera_images(scene, image_root=image_root) # shape:(camera, frames)
         obs_images = get_camera_images(scene, image_root=obs_root) # shape:(camera, frames)
 
         full_image_paths = []
@@ -195,11 +198,13 @@ def main():
                 full_image_paths.append(camera_image)
 
         output_text, answers_by_view = get_mulit_dialogs(
-            model,
-            processor,
-            data_args.camera_order,
-            full_image_paths,
-            navigation_info,
+            model=model,
+            processor=processor,
+            camera_order=data_args.camera_order,
+            multi_frame_paths=obs_images,
+            navigation_info=navigation_info,
+            object_position_info=object_position_info,
+
         )
 
         input_Q = (
@@ -238,6 +243,9 @@ def main():
         converted_data.append(entry)
 
         # TODO visualize
+        if if_vis:
+            vis_path.mkdir(parents=True, exist_ok=True)
+            save_text(vis_path / f"{token}.txt", output_A)
 
         global_idx += 1
 
