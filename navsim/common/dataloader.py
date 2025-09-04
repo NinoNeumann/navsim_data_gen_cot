@@ -3,7 +3,7 @@ from __future__ import annotations
 import lzma
 import pickle
 from typing import Any, Dict, List, Tuple
-
+from pathlib import Path
 from tqdm import tqdm
 
 from navsim.common.dataclasses import AgentInput, Scene, SceneFilter, SensorConfig
@@ -31,7 +31,7 @@ def filter_scenes(data_path: Path, scene_filter: SceneFilter) -> Tuple[Dict[str,
     stop_loading: bool = False
 
     # filter logs
-    log_files = list(data_path.iterdir())
+    log_files = [fops.join(data_path,log_file) for log_file in fops.listdir(data_path)]
     if scene_filter.log_names is not None:
         log_files = [log_file for log_file in log_files if fops.basename(log_file).replace(".pkl", "") in scene_filter.log_names]
 
@@ -42,7 +42,6 @@ def filter_scenes(data_path: Path, scene_filter: SceneFilter) -> Tuple[Dict[str,
         filter_tokens = False
 
     for log_pickle_path in tqdm(log_files, desc="Loading logs"):
-
         scene_dict_list = pickle.load(fops.open_file(log_pickle_path, "rb"))
         for frame_list in split_list(scene_dict_list, scene_filter.num_frames, scene_filter.frame_interval):
             # Filter scenes which are too short
@@ -309,8 +308,8 @@ class MetricCacheLoader:
         :param cache_path: directory of cache folder
         :return: dictionary of token and file path
         """
-        metadata_dir = cache_path / "metadata"
-        metadata_file = [file for file in metadata_dir.iterdir() if ".csv" in str(file)][0]
+        metadata_dir = fops.join(cache_path, "metadata")
+        metadata_file = [file for file in fops.listdir(metadata_dir) if ".csv" in str(file)][0]
         with open(str(metadata_file), "r") as f:
             cache_paths = f.read().splitlines()[1:]
         metric_cache_dict = {cache_path.split("/")[-2]: cache_path for cache_path in cache_paths}
@@ -354,5 +353,5 @@ class MetricCacheLoader:
         full_metric_cache = {}
         for token in tqdm(self.tokens):
             full_metric_cache[token] = self.get_from_token(token)
-        with open(path, "wb") as f:
+        with fops.open(path, "wb") as f:
             pickle.dump(full_metric_cache, f)

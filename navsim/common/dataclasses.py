@@ -24,6 +24,7 @@ from pyquaternion import Quaternion
 from navsim.planning.simulation.planner.pdm_planner.utils.pdm_geometry_utils import (
     convert_absolute_to_relative_se2_array,
 )
+import navsim.common.file_ops as fops
 
 NAVSIM_INTERVAL_LENGTH: float = 0.5
 OPENSCENE_DATA_ROOT = os.environ.get("OPENSCENE_DATA_ROOT")
@@ -113,7 +114,7 @@ class Lidar:
     @staticmethod
     def _load_bytes(lidar_path: Path) -> BinaryIO:
         """Helper static method to load lidar point cloud stream."""
-        with open(lidar_path, "rb") as fp:
+        with fops.open(lidar_path, "rb") as fp:
             return io.BytesIO(fp.read())
 
     @classmethod
@@ -128,7 +129,7 @@ class Lidar:
 
         # NOTE: this could be extended to load specific LiDARs in the merged pc
         if "lidar_pc" in sensor_names:
-            global_lidar_path = sensor_blobs_path / lidar_path
+            global_lidar_path = fops.join(sensor_blobs_path,lidar_path)
             lidar_pc = LidarPointCloud.from_buffer(cls._load_bytes(global_lidar_path), "pcd").points
             return Lidar(lidar_pc, lidar_path)
         return Lidar()  # empty lidar
@@ -217,7 +218,7 @@ class AgentInput:
             lidars.append(
                 Lidar.from_paths(
                     sensor_blobs_path=sensor_blobs_path,
-                    lidar_path=Path(scene_dict_list[frame_idx]["lidar_path"]) if scene_dict_list[frame_idx]["lidar_path"] is not None else None,
+                    lidar_path=scene_dict_list[frame_idx]["lidar_path"] if scene_dict_list[frame_idx]["lidar_path"] is not None else None,
                     sensor_names=sensor_names,
                 )
             )

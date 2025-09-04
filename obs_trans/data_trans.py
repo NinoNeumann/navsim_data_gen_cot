@@ -6,7 +6,6 @@ os.environ["ACCESS_KEY_ID"] = "HPUAUMBABND5R21BA8CR"
 os.environ["SECRET_ACCESS_KEY"] = "GPs3Ag6ahEpm]rEZZmb9bOUlWaCHBVVLYR1rONSV"
 
 import moxing as mox
-import icecream as ic
 obs_path = "Partner_Zhu/models"
 a = "obs://yw-2030-extern/Partner_Zhu/navsim/navsim-data/sensor_blobs/mini"
 b = "obs://yw-2030-extern/Partner_Zhu/navsim/navsim-data/navsim_logs/mini"

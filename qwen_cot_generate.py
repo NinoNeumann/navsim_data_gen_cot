@@ -2,6 +2,9 @@
 import json
 import os
 import sys
+from pathlib import Path
+
+from dataclasses import dataclass, field
 
 
 from typing import Any, Dict, Optional
@@ -9,13 +12,16 @@ from typing import Any, Dict, Optional
 
 from utils.navsim_utils import (
     init_scene_loader,
-    get_agent_camera_images,
+    get_camera_images,
     to_traj_string,
+    get_history_future_trajs,
+    get_history_navigation_infomation
 
 )
 
 from utils.qwen_utils import (
-    get_mulit_dialogs
+    get_mulit_dialogs,
+    pick_dtype
 )
 
 from utils.vis_utils import (
@@ -92,6 +98,9 @@ class DataArguments:
     max_scenes: int = field(default=None)
     data_type: str = field(default="mini")
 
+    image_root: str = field(default="./images")
+    obs_root: str = field(default="obs://yw-2030-extern/Partner_Zhu/navsim/navsim-data")
+
     traj_steps: int = field(default=8)
 
     vis_path: str = field(default="./visual")
@@ -114,18 +123,35 @@ def main():
     assert 0 <= rank < world, f"rank_idx must be in [0, {world-1}], got {rank}"
 
     model_path = Path(model_args.model_path)
-    nusc_root = Path(data_args.nusc_root)
-    json_path = Path(data_args.json_path)
     out_path = Path(data_args.output_json)
+
+    # processor
+    min_pixels = data_args.min_pixels
+    max_pixels = data_args.max_pixels
+
+    # navsim
+    navsim_root = Path(data_args.nav_root)
+    num_hist_traj = data_args.num_hist_traj
+    num_fut_traj = data_args.num_fut_traj
+    data_type = data_args.data_type
+
+    # path prefix
+    image_root = Path(data_args.image_root)
+    obs_root = data_args.obs_root
+
+
 
     # If running multi-rank and user didn't include a placeholder, auto-suffix.
     if world > 1 and "{rank}" not in out_path.name:
         out_path = out_path.with_name(f"{out_path.stem}.rank{rank}{out_path.suffix}")
 
-    with json_path.open("r") as f:
-        index = json.load(f)
 
-    scene_loader = init_scene_loader()
+    scene_loader = init_scene_loader(
+        data_root=navsim_root,
+        num_hist_frame=num_hist_traj,
+        num_fut_frame=num_fut_traj,
+        data_type=data_type
+    )
 
     torch_dtype = pick_dtype(model_args.torch_dtype)
     try:
@@ -140,7 +166,7 @@ def main():
             str(model_path), torch_dtype=torch_dtype, device_map=model_args.device_map
         )
 
-    processor = AutoProcessor.from_pretrained(str(model_path))
+    processor = AutoProcessor.from_pretrained(str(model_path), max_pixels=max_pixels, min_pixels=min_pixels)
 
     converted_data: list[dict[str, Any]] = []
 
@@ -148,198 +174,72 @@ def main():
     global_idx = 0  # same ordering across ranks
     per_rank_cap = data_args.max_entries if data_args.max_entries >= 0 else None
 
-    scenes = list(index.keys())
-    pbar_scenes = tqdm(scenes, desc=f"[rank {rank}/{world}] Scenes", position=0)
+    tokens = sorted(list(scene_loader.tokens))
 
-    for scene_key in pbar_scenes:
-        key_frames = index[scene_key].get("key_frames", [])
-        for sample_token in key_frames:
-            # shard: only process indices where idx % world_size == rank_idx
-            if (global_idx % world) != rank:
-                global_idx += 1
-                continue
+    pbar_tokens = tqdm(tokens, desc=f"[rank {rank}/{world}] Scenes", position=0)
 
-            # per-rank cap
-            if per_rank_cap is not None and len(converted_data) >= per_rank_cap:
-                break
+    for token in pbar_tokens:
+        if (global_idx % world) != rank:
+            global_idx += 1
+            continue
+        print(f"==========token:{token}==========")
+        scene = scene_loader.get_scene_from_token(token)
+        hist_traj, fut_traj = get_history_future_trajs(scene)
+        navigation_info, _ = get_history_navigation_infomation(scene)
+        scene_images = get_camera_images(scene, image_root=image_root) # shape:(camera, frames)
+        obs_images = get_camera_images(scene, image_root=obs_root) # shape:(camera, frames)
 
-            fut_traj = compute_relative_traj(nusc, sample_token, steps=data_args.traj_steps)
-            if len(fut_traj) < data_args.traj_steps:
-                global_idx += 1
-                continue
+        full_image_paths = []
+        for camera_images in obs_images:
+            for camera_image in camera_images:
+                full_image_paths.append(camera_image)
 
-            # For now, navigation_info is None - you can extend this to include actual navigation data
-            navigation_info = None  # TODO: Add actual navigation information if available
-            
-            if data_args.use_multiframe:
-                # Get multi-frame data
-                multiframe_rel_paths = get_surrounding_views_multiframe(
-                    nusc, sample_token, order=data_args.camera_order, num_frames=data_args.num_frames
-                )
-                
-                # Skip if we don't have enough frames
-                if len(multiframe_rel_paths) < data_args.num_frames:
-                    global_idx += 1
-                    continue
-                
-                # Convert to absolute paths
-                multiframe_image_paths = []
-                for frame_paths in multiframe_rel_paths:
-                    frame_absolute_paths = [nusc_root / rp for rp in frame_paths]
-                    multiframe_image_paths.append(frame_absolute_paths)
-                
-                # Flatten image paths for the final entry
-                image_paths = [path for frame_paths in multiframe_image_paths for path in frame_paths]
-                
-                # Use multi-turn dialog or single turn based on configuration
-                if data_args.use_multiturn_dialog:
-                    # Compute history trajectory for multi-turn dialog
-                    hist_traj = compute_relative_history_traj(nusc, sample_token, steps=data_args.traj_steps)
-                    
-                    # Generate using 4-turn dialog
-                    output_text = generate_multiturn_dialog(
-                        model,
-                        processor,
-                        multiframe_image_paths,
-                        data_args.min_pixels,
-                        data_args.max_pixels,
-                        fut_traj,
-                        hist_traj,
-                        navigation_info,
-                        max_new_tokens=model_args.max_new_tokens // 4  # Divide tokens across 4 turns
-                    )
-                    output_texts = [output_text]
-                else:
-                    # Single turn generation
-                    hist_traj = compute_relative_history_traj(nusc, sample_token, steps=data_args.traj_steps)
-                    image_messages = build_image_messages(
-                        multiframe_image_paths,
-                        data_args.min_pixels, 
-                        data_args.max_pixels,
-                        fut_traj,
-                        hist_traj,
-                        navigation_info
-                    )
-                    
-                    text = processor.apply_chat_template(
-                        image_messages, tokenize=False, add_generation_prompt=True, add_vision_id=True
-                    )
-                    image_inputs, video_inputs = process_vision_info(image_messages)
-                    inputs = processor(
-                        text=[text],
-                        images=image_inputs,
-                        videos=video_inputs,
-                        padding=True,
-                        return_tensors="pt",
-                    )
+        output_text, answers_by_view = get_mulit_dialogs(
+            model,
+            processor,
+            data_args.camera_order,
+            full_image_paths,
+            navigation_info,
+        )
 
-                    model_device = getattr(model, "device", torch.device("cuda" if torch.cuda.is_available() else "cpu"))
-                    inputs = {k: (v.to(model_device) if hasattr(v, "to") else v) for k, v in inputs.items()}
+        input_Q = (
+            f"Here are {len(data_args.camera_order)} consecutive frames of 6 surrounding onboard camera views from a vehicle:\n"
+            f"Front camera: {[f'frame{i}<image>' for i in range(num_hist_traj)]}"
+            f"Front Left camera: {[f'frame{i}<image>' for i in range(num_hist_traj)]}"
+            f"Front Right camera: {[f'frame{i}<image>' for i in range(num_hist_traj)]}"
+            f"Left camera: {[f'frame{i}<image>' for i in range(num_hist_traj)]}"
+            f"Right camera: {[f'frame{i}<image>' for i in range(num_hist_traj)]}"
+            f"Back camera: {[f'frame{i}<image>' for i in range(num_hist_traj)]}"
+            f"Back Left camera: {[f'frame{i}<image>' for i in range(num_hist_traj)]}"
+            f"Back Right camera: {[f'frame{i}<image>' for i in range(num_hist_traj)]}"
+            f"\nThe navigation information is: {navigation_info}"
+            f"\nThe history trajectory is: {to_traj_string(hist_traj)}"
+            f"Predict the optimal driving action for the next 4 seconds with 8 new waypoints."
+        )
+        output_A = (
+            f"<think>{output_text}</think><trajectory>{to_traj_string(fut_traj)}</trajectory>"
+        )
 
-                    with torch.no_grad():
-                        if torch.cuda.is_available():
-                            with torch.cuda.amp.autocast(dtype=torch.bfloat16 if torch_dtype == torch.bfloat16 else torch.float16):
-                                generated_ids = model.generate(**inputs, max_new_tokens=model_args.max_new_tokens)
-                        else:
-                            generated_ids = model.generate(**inputs, max_new_tokens=model_args.max_new_tokens)
+        entry = {
+            "datasource": "navsim",
+            "id": str(token),
+            "image": [str(p) for p in full_image_paths],
+            "conversations": [
+                {
+                    "from": "human",
+                    "value": input_Q,
+                },
+                {
+                    "from": "gpt",
+                    "value": output_A,
+                }
+            ],
+        }
+        converted_data.append(entry)
 
-                    generated_ids_trimmed = [out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs["input_ids"], generated_ids)]
-                    output_texts = processor.batch_decode(
-                        generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
-                    )
-                
-            else:
-                # Single frame mode (original behavior) - not supported with multiturn for now
-                rel_paths = get_surrounding_views(nusc, sample_token, order=data_args.camera_order)
-                image_paths = [nusc_root / rp for rp in rel_paths]
-                
-                # For single frame, we'll use empty history
-                hist_traj = []
-                image_messages = build_image_messages(
-                    [image_paths],  # Wrap in list to match multiframe format 
-                    data_args.min_pixels, 
-                    data_args.max_pixels,
-                    fut_traj,
-                    hist_traj,
-                    navigation_info
-                )
-                
-                text = processor.apply_chat_template(
-                    image_messages, tokenize=False, add_generation_prompt=True, add_vision_id=True
-                )
-                image_inputs, video_inputs = process_vision_info(image_messages)
-                inputs = processor(
-                    text=[text],
-                    images=image_inputs,
-                    videos=video_inputs,
-                    padding=True,
-                    return_tensors="pt",
-                )
+        # TODO visualize
 
-                model_device = getattr(model, "device", torch.device("cuda" if torch.cuda.is_available() else "cpu"))
-                inputs = {k: (v.to(model_device) if hasattr(v, "to") else v) for k, v in inputs.items()}
-
-                with torch.no_grad():
-                    if torch.cuda.is_available():
-                        with torch.cuda.amp.autocast(dtype=torch.bfloat16 if torch_dtype == torch.bfloat16 else torch.float16):
-                            generated_ids = model.generate(**inputs, max_new_tokens=model_args.max_new_tokens)
-                    else:
-                        generated_ids = model.generate(**inputs, max_new_tokens=model_args.max_new_tokens)
-
-                generated_ids_trimmed = [out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs["input_ids"], generated_ids)]
-                output_texts = processor.batch_decode(
-                    generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
-                )
-
-            if data_args.use_multiframe:
-                # Multi-frame conversation format
-                image_placeholders = ""
-                for frame_idx in range(data_args.num_frames):
-                    image_placeholders += f"Frame {frame_idx + 1}:\n"
-                    for cam_name in ["Front", "Front Left", "Front Right", "Back", "Back Left", "Back Right"]:
-                        image_placeholders += f"{cam_name} camera:<image>\n"
-                    if frame_idx < data_args.num_frames - 1:
-                        image_placeholders += "\n"
-                
-                human_value = (
-                    f"Here are {data_args.num_frames} consecutive frames of 6 surrounding onboard camera views from a vehicle:\n"
-                    f"{image_placeholders}"
-                    "Predict the optimal driving action for the next 4 seconds with 8 new waypoints and "
-                    "use step-by-step reasoning (Chain-of-Thought) to arrive at the best driving action. "
-                    "Consider the temporal dynamics observed across the frames."
-                )
-            else:
-                # Single frame conversation format (original)
-                human_value = (
-                    "Here are 6 surrounding onboard camera views from a vehicle:\n"
-                    "Front camera:<image>\nFront Left camera:<image>\nFront Right camera:<image>\n"
-                    "Back camera:<image>\nBack Left camera:<image>\nBack Right camera:<image>\n"
-                    "Predict the optimal driving action for the next 4 seconds with 8 new waypoints and "
-                    "use step-by-step reasoning (Chain-of-Thought) to arrive at the best driving action."
-                )
-
-            entry = {
-                "datasource": "driveLM",
-                "id": str(uuid.uuid4()),
-                "image": [str(p) for p in image_paths],
-                "conversations": [
-                    {
-                        "from": "human",
-                        "value": human_value,
-                    },
-                    {
-                        "from": "gpt",
-                        "value": f"<think>{output_texts[0]}</think><trajectory>{to_traj_string(fut_traj)}</trajectory>",
-                    },
-                ],
-            }
-            converted_data.append(entry)
-
-            global_idx += 1  # advance after processing
-
-        # per-rank cap break (outer loop)
-        if per_rank_cap is not None and len(converted_data) >= per_rank_cap:
-            break
+        global_idx += 1
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w") as f:
@@ -349,7 +249,6 @@ def main():
         f"[rank {rank}/{world}] saved {len(converted_data)} entries "
         f"(cap={per_rank_cap}) → {out_path}"
     )
-
 
 if __name__ == "__main__":
     main()

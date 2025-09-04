@@ -4,6 +4,7 @@ import torch
 from pathlib import Path
 import numpy as np
 from collections import Counter
+from typing import Tuple
 
 from navsim.common.dataclasses import(
     Scene,
@@ -23,7 +24,7 @@ def init_scene_loader(
     num_hist_frame:int,
     num_fut_frame:int,
     max_scenes:int = None,
-    data_type:str = "mini",
+    data_type:str = "trainval",
 ):
     
     navsim_logs_path = fops.join(data_root,"navsim_logs", data_type)
@@ -84,13 +85,26 @@ def get_object_grounding(scene:Scene):
 
     pass
 
+
+def map_command_to_direction(command: np.ndarray) -> str:
+    idx = np.argmax(command)
+    if idx == 0:
+        return "left"
+    elif idx == 1:
+        return "straight"
+    elif idx == 2:
+        return "right"
+    else:
+        return "unknown"
+    return "unknown"
+
 def get_history_navigation_infomation(scene) -> Tuple[str, np.ndarray]:
     agent_input = scene.get_agent_input()
     navigation_command = agent_input.ego_statuses
-    all_command = []
+    all_commands = []
     for ego_status in navigation_command:
-        cnd = ego_status.driving_command
-        all_command.append(tuple(cmd))
+        cmd = ego_status.driving_command
+        all_commands.append(tuple(cmd))
     
     if not all_commands:
         default_cmd = np.array([0,0,0,1])
@@ -106,6 +120,15 @@ def get_history_navigation_infomation(scene) -> Tuple[str, np.ndarray]:
 
 def to_traj_string(traj: list[tuple[float, float]]) -> str:
     return "; ".join(f"({x:.2f}, {y:.2f})" for x, y in traj)
+
+
+def get_history_future_trajs(scene:Scene):
+    history_traj = scene.get_history_trajectory()
+    history_traj = np.array([(pose[0], pose[1]) for pose in history_traj.poses])
+    future_traj = scene.get_future_trajectory()
+    future_traj = np.array([(pose[0], pose[1]) for pose in future_traj.poses])
+    return history_traj, future_traj
+    
 
 
 if __name__=="__main__":
