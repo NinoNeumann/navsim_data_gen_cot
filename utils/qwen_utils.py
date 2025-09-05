@@ -274,9 +274,7 @@ def get_mulit_dialogs(
     
         # debug info
         print(f"=======view:{camera_type}=======")
-        print(f"Environment description: {result['environment']}")
-        print(f"Key objects: {result['key_objects']}")
-        print(f"Decision points: {result['decision_notes']}")
+        print(f"description: {result['answer']}")
         print(f"=================================")
 
     if answers_by_view:
