@@ -6,8 +6,30 @@ import numpy as np
 import navsim.common.file_ops as fops 
 
 
+def resize(img, target_size=28):
+    """
+    Resize PIL image so that both width and height
+    are multiples of target_size (default 28).
+    Keeps aspect ratio as much as possible.
+    """
+    w, h = img.size
+    
+    # 先按比例缩放，使得最小边 ≥ target_size
+    scale = max(target_size / w, target_size / h)
+    new_w = int(round(w * scale))
+    new_h = int(round(h * scale))
+    img = img.resize((new_w, new_h), Image.BICUBIC)
 
+    # 再把长宽修正到 target_size 的倍数
+    new_w = (new_w // target_size) * target_size
+    new_h = (new_h // target_size) * target_size
+    
+    # 避免被除成 0
+    new_w = max(target_size, new_w)
+    new_h = max(target_size, new_h)
 
+    img = img.resize((new_w, new_h), Image.BICUBIC)
+    return img
 
 def ask_camera_view(
     view_name: str, 
@@ -38,15 +60,21 @@ def ask_camera_view(
     for img_path in frame_paths:
         if not fops.exists(img_path):
             raise FileNotFoundError(f"Image not found: {img_path}")
-        pil_images.append(fops.image_open(frame_paths).convert("RGB"))
+        img = fops.image_open(img_path).convert("RGB")
+        print(img.size)
+        img = resize(img)
+        print(img.size)
+        pil_images.append(img)
 
+    min_pixels = 256 * 28 * 28
+    max_pixels = 1280 * 28 * 28
     messages = [
         {"role": "system", "content": [{"type": "text", "text": system_prompt}]},
         {
             "role": "user",
             "content": (
                 [{"type": "text", "text": f"View: {view_name}. These are 4 frames from this perspective."}]
-                + [{"type": "image", "image": img} for img in pil_images]
+                + [{"type": "image", "image": img, "min_pixels":min_pixels, "max_pixels":max_pixels} for img in pil_images]
                 + [{"type": "text", "text": "Question 1: Describe the environment around the vehicle, avoid using excessive adjectives."}]
             ),
         },
@@ -54,7 +82,7 @@ def ask_camera_view(
 
     def _generate(current_messages: List[Dict[str, Any]], max_new_tokens: int = 512) -> str:
         text = processor.apply_chat_template(current_messages, add_generation_prompt=True)
-        inputs = processor(text=[text], images=[pil_images], return_tensors="pt").to(model.device)
+        inputs = processor(text=[text], images=pil_images, return_tensors="pt")
         with torch.no_grad():
             output_ids = model.generate(
                 **inputs,

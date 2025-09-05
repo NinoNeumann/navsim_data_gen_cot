@@ -1,25 +1,27 @@
 #!/bin/bash
 set -e
 
-export S3_ENDPOINT=https://obs.cn-southwest-2.huaweicloud.com
-export S3_USE_HHTPS=0
-export ACCESS_KEY_ID=HPUAUMBABND5R21BA8CR
-export SECRET_ACCESS_KEY=GPs3Ag6ahEpm]rEZZmb9bOUlWaCHBVVLYR1rONSV
+# export S3_ENDPOINT=https://obs.cn-southwest-2.huaweicloud.com
+# export S3_USE_HHTPS=0
+# export ACCESS_KEY_ID=HPUAUMBABND5R21BA8CR
+# export SECRET_ACCESS_KEY=GPs3Ag6ahEpm]rEZZmb9bOUlWaCHBVVLYR1rONSV
 
 # Path to your Python script
 PY_SCRIPT="qwen_cot_generate.py"
 
 export NUPLAN_MAPS_ROOT=/home/ma-user/work/navsim/maps
+export ASCEND_LAUNCH_BLOCKING=1
 
 # Common args for all ranks
 NAV_ROOT="obs://yw-2030-extern/Partner_Zhu/navsim/navsim-data/"
-OUTPUT_JSON="converted_output.json"
+OUTPUT_JSON="converted_output"
 MODEL_PATH="/home/ma-user/work/Qwen2.5-VL-7B-Instruct"
 
 # Additional parameters matching qwen_cot_generate.py
 IMAGE_ROOT="./images"
-OBS_ROOT="obs://yw-2030-extern/Partner_Zhu/navsim/navsim-data"
+
 DATA_TYPE="mini"
+OBS_ROOT="obs://yw-2030-extern/Partner_Zhu/navsim/navsim-data/sensor_blobs/$DATA_TYPE/"
 NUM_HIST_TRAJ=4
 NUM_FUT_TRAJ=6
 
@@ -33,7 +35,7 @@ IF_VIS=Ture
 cmd="python $PY_SCRIPT \
     --model_path $MODEL_PATH \
     --nav_root $NAV_ROOT \
-    --output_json $OUTPUT_JSON \
+    --out_dir $OUTPUT_JSON \
     --image_root $IMAGE_ROOT \
     --obs_root $OBS_ROOT \
     --data_type $DATA_TYPE \

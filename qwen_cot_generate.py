@@ -41,7 +41,7 @@ from transformers import (
 
 from qwen_vl_utils import process_vision_info
 
-
+import navsim.common.file_ops as fops
 # =========================
 # Dataclass Args
 # =========================
@@ -57,7 +57,7 @@ class ModelArguments:
         metadata={"help": "Attention impl (e.g. 'flash_attention_2' or 'eager')."},
     )
     torch_dtype: str = field(
-        default="auto",
+        default="float16",
         metadata={"help": "auto | bfloat16 | float16 | float32"},
     )
     device_map: str = field(
@@ -75,8 +75,8 @@ class DataArguments:
     nav_root: str = field(
         metadata={"help": "navsim dataroot (folder containing the 1.0 subfolder)."}
     )
-    output_json: str = field(
-        default="converted_output.json",
+    out_dir: str = field(
+        default="converted_output",
         metadata={"help": "Where to save the converted dataset. Auto-suffixed per rank if world_size>1."},
     )
     camera_order: list[str] = field(
@@ -92,8 +92,8 @@ class DataArguments:
         ],
         metadata={"help": "Order of surrounding cameras to read per sample."},
     )
-    min_pixels: int = field(default=64 * 28 * 28)
-    max_pixels: int = field(default=1280 * 28 * 28)
+    min_pixels: int = field(default=512 * 512)
+    max_pixels: int = field(default=1536 * 1536)
     num_hist_traj: int = field(default=4)
     num_fut_traj: int = field(default=6)
     num_hist_frames: int = field(default=4, metadata={"help": "Number of frames to use in the question (should be <= num_hist_traj)"})
@@ -131,7 +131,7 @@ def main():
     assert 0 <= rank < world, f"rank_idx must be in [0, {world-1}], got {rank}"
 
     model_path = Path(model_args.model_path)
-    out_path = Path(data_args.output_json)
+    out_path = Path(data_args.out_dir)
 
     # processor
     min_pixels = data_args.min_pixels
@@ -157,9 +157,11 @@ def main():
         print(f"Warning: num_hist_frames ({num_hist_frames}) > num_hist_traj ({num_hist_traj}). Setting num_hist_frames to {num_hist_traj}")
         num_hist_frames = num_hist_traj
 
+    out_path = fops.join(data_args.out_dir,'convert.json')
+
     # If running multi-rank and user didn't include a placeholder, auto-suffix.
-    if world > 1 and "{rank}" not in out_path.name:
-        out_path = out_path.with_name(f"{out_path.stem}.rank{rank}{out_path.suffix}")
+    if world > 1 and "{rank}" not in out_path:
+        out_path = out_path.replace(".json",f"_{rank}.json")
 
 
     scene_loader = init_scene_loader(
@@ -182,7 +184,8 @@ def main():
             str(model_path), torch_dtype=torch_dtype, device_map=model_args.device_map
         )
 
-    processor = AutoProcessor.from_pretrained(str(model_path), max_pixels=max_pixels, min_pixels=min_pixels)
+    # processor = AutoProcessor.from_pretrained(str(model_path), max_pixels=max_pixels, min_pixels=min_pixels)
+    processor = AutoProcessor.from_pretrained(str(model_path))
 
     converted_data: list[dict[str, Any]] = []
 
@@ -201,14 +204,13 @@ def main():
         
         print(f"==========token:{token}==========")
         scene = scene_loader.get_scene_from_token(token)
-        print("scene", scene)
+        # print("scene", scene)
         hist_traj, fut_traj = get_history_future_trajs(scene)
         navigation_info, _ = get_history_navigation_infomation(scene)
         object_position_info = get_object_position(scene)
         # scene_images = get_camera_images(scene, image_root=image_root) # shape:(camera, frames)
         obs_images = get_camera_images(scene, image_root=obs_root, frame_num=num_hist_traj) # shape:(camera, frames)
         image_for_save = get_camera_images(scene, image_root=obs_root, frame_num=num_hist_frames)
-        print(obs_images)
         full_image_paths = []
         for camera_images in image_for_save:
             for camera_image in camera_images:
@@ -266,8 +268,7 @@ def main():
 
         global_idx += 1
 
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    with out_path.open("w") as f:
+    with mox.file.File(out_path,'w') as f:
         json.dump(converted_data, f, indent=2)
 
     print(

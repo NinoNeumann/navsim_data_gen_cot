@@ -77,9 +77,10 @@ class Cameras:
         for camera_name in camera_dict.keys():
             camera_identifier = camera_name.lower()
             if camera_identifier in sensor_names:
-                image_path = sensor_blobs_path / camera_dict[camera_name]["data_path"]
+                image_path = fops.join(sensor_blobs_path,camera_dict[camera_name]["data_path"])
+                # print(f"image_path:{image_path}")
                 data_dict[camera_identifier] = Camera(
-                    image=np.array(Image.open(image_path)),
+                    image=np.array(fops.image_open(image_path)),
                     sensor2lidar_rotation=camera_dict[camera_name]["sensor2lidar_rotation"],
                     sensor2lidar_translation=camera_dict[camera_name]["sensor2lidar_translation"],
                     intrinsics=camera_dict[camera_name]["cam_intrinsic"],
@@ -114,7 +115,7 @@ class Lidar:
     @staticmethod
     def _load_bytes(lidar_path: Path) -> BinaryIO:
         """Helper static method to load lidar point cloud stream."""
-        with fops.open(lidar_path, "rb") as fp:
+        with fops.open_file(lidar_path, "rb") as fp: #TODO 改成了open_file
             return io.BytesIO(fp.read())
 
     @classmethod

@@ -28,7 +28,7 @@ def init_scene_loader(
     
     navsim_logs_path = fops.join(data_root,"navsim_logs", data_type)
     navsim_blobs_path = fops.join(data_root,"sensor_blobs", data_type)
-
+    print(f"navsim_blobs:{navsim_blobs_path}")
     scenes_filter = SceneFilter(
         max_scenes=max_scenes,
         num_history_frames=num_hist_frame,
@@ -38,7 +38,8 @@ def init_scene_loader(
     scenes_loader = SceneLoader(
         data_path=navsim_logs_path,
         original_sensor_path=navsim_blobs_path,
-        scene_filter=scenes_filter
+        scene_filter=scenes_filter,
+        sensor_config=SensorConfig.build_all_sensors()
     )
 
     return scenes_loader
@@ -58,7 +59,7 @@ def get_camera_images(scene:Scene, image_root:str, frame_num:int):
 
     for frame_camera in agentInput.cameras[:frame_num]:
         # 根据相机类型添加到对应的路径列表
-        print(frame_camera.cam_f0.camera_path)
+        # print(frame_camera.cam_f0.camera_path)
         camera_frame_f0_paths.append(fops.join(image_root, frame_camera.cam_f0.camera_path))
         camera_frame_l0_paths.append(fops.join(image_root, frame_camera.cam_l0.camera_path))
         camera_frame_r0_paths.append(fops.join(image_root, frame_camera.cam_r0.camera_path))
