@@ -45,8 +45,7 @@ def ask_camera_view(
 
     Returns a dict with keys: "environment", "key_objects", "decision_notes".
     """
-    if len(frame_paths) != 4:
-        raise ValueError(f"Expected 4 frames for view {view_name}, got {len(frame_paths)}")
+    
 
     system_prompt = (
         "You are an intelligent driving vision understanding assistant. Please analyze the four frames of images "
@@ -61,9 +60,9 @@ def ask_camera_view(
         if not fops.exists(img_path):
             raise FileNotFoundError(f"Image not found: {img_path}")
         img = fops.image_open(img_path).convert("RGB")
-        print(img.size)
-        img = resize(img)
-        print(img.size)
+        # print(img.size)
+        # img = resize(img)
+        # print(img.size)
         pil_images.append(img)
 
     min_pixels = 256 * 28 * 28
@@ -161,21 +160,37 @@ def summarize_across_views(
             else:
                 direction = "left"
             
-            object_position_text += f"- <obj>{name}</obj>: {direction}, distance {distance:.1f}m, heading {heading_deg:.1f}°\n"
+            object_position_text += f"- <obj>{name}</obj>: {direction}, distance {distance:.1f}m, position {rel_pos}, heading {heading_deg:.1f}°\n"
     
     system_prompt = (
-        "You are a visual summarization assistant in the field of intelligent driving. Now providing answers from six perspectives "
-        "in three categories: (1) Environment description, (2) Key objects, (3) Decision points. "
-        f"The navigation information is: {navigation_info}"
-        f"{object_position_text}"
-        "Please synthesize them comprehensively, avoid repetition and redundancy, and output the final three sections:\n"
-        "1. Environment description (concise, fact-based)\n"
-        "2. Key objects (condensed by category or priority, incorporating position information)\n"
-        "3. Decision points (driving strategy-oriented key points, considering object positions and navigation)\n\n"
-        "IMPORTANT: When describing traffic-related objects (vehicles, pedestrians, traffic signs, traffic lights, road markings, etc.), "
-        "always wrap them with <obj></obj> tags. For example: <obj>car</obj>, <obj>traffic light</obj>, <obj>pedestrian</obj>. "
-        "When mentioning object positions, use the relative position information provided above to give spatial context."
-    )
+    "You are a visual summarization assistant in the field of intelligent driving. Now providing answers from six perspectives "
+    "in three categories: (1) Environment description, (2) Key objects, (3) Decision points. "
+    f"The navigation information is: {navigation_info}"
+    f"{object_position_text}"
+    "Please synthesize them comprehensively, avoid repetition and redundancy, and output the final three sections:\n"
+    "1. Environment description (concise, fact-based)\n"
+    "2. Key objects (condensed by category or priority, incorporating position information)\n"
+    "3. Decision (make driving decisions by considering information from all previous camera views and navigation; "
+    "   provide a reasonable driving decision along with a brief explanation of the reasoning)\n\n"
+    "IMPORTANT GENERAL TAGGING: When describing traffic-related objects (vehicles, pedestrians, traffic signs, traffic lights, road markings, etc.), "
+    "always wrap them with <obj></obj> tags. For example: <obj>car</obj>, <obj>traffic light</obj>, <obj>pedestrian</obj>.\n\n"
+    "STRICT TAGGING & COORD APPEND RULES:\n"
+    "- For every object that appears in the 'Object positions relative to ego vehicle (BEV perspective)' list above (i.e., in the provided object_position_text), "
+    "  whenever you mention that object in your final output, you MUST:\n"
+    "  (1) Wrap the exact noun with <obj></obj> (e.g., <obj>bus</obj>), AND\n"
+    "  (2) Immediately append its coordinate tuple as '(x, y)' using EXACTLY the 'position' shown above (no rounding, no reordering, no additional units),\n"
+    "      e.g., <obj>bus</obj>(12.4, -3.1). The numbers and sign must match the 'position' field verbatim.\n"
+    "- If you mention an object that does NOT appear in the positions list, still tag it with <obj></obj> but DO NOT append any coordinates.\n"
+    "- Do NOT invent, alter, or infer new coordinates. Use only the 'position' tuple provided above.\n"
+    "- When you summarize by category or priority, keep each listed object's coordinates right after its tag the first time it appears in that line.\n"
+    "- If the same object is repeated within a sentence/line, append the coordinates only once at its first mention in that sentence/line.\n"
+    "- Preserve the tuple order as '(x, y)'; do not swap axes and do not change precision.\n\n"
+    "OUTPUT STYLE:\n"
+    "- Keep statements factual and concise; avoid flowery adjectives.\n"
+    "- Use bullet points for 'Key objects' where helpful; each bullet may group objects by category/priority, but ensure the tagging and coordinate rules are followed.\n"
+    "- Do not duplicate information across sections; put object-level details in 'Key objects' and strategy in 'Decision points'."
+)
+
 
     # Build a single user message that lists per-view answers
     lines = ["The following is a summary input from each perspective:"]

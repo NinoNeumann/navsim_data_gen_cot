@@ -40,13 +40,15 @@ cmd="python $PY_SCRIPT \
     --obs_root $OBS_ROOT \
     --data_type $DATA_TYPE \
     --num_hist_traj $NUM_HIST_TRAJ \
+    --num_hist_frames 1 \
     --num_fut_traj $NUM_FUT_TRAJ \
     --max_new_tokens $MAX_NEW_TOKENS \
     --min_pixels $MIN_PIXELS \
     --max_pixels $MAX_PIXELS \
     --vis_path $VIS_PATH \
     --rank_idx 0 \
-    --world_size 1 "
+    --world_size 1  \
+    --max_scenes 3 "
 echo "$cmd"
 eval "$cmd" &
 

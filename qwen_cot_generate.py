@@ -42,6 +42,7 @@ from transformers import (
 from qwen_vl_utils import process_vision_info
 
 import navsim.common.file_ops as fops
+import moxing as mox
 # =========================
 # Dataclass Args
 # =========================
@@ -96,7 +97,7 @@ class DataArguments:
     max_pixels: int = field(default=1536 * 1536)
     num_hist_traj: int = field(default=4)
     num_fut_traj: int = field(default=6)
-    num_hist_frames: int = field(default=4, metadata={"help": "Number of frames to use in the question (should be <= num_hist_traj)"})
+    num_hist_frames: int = field(default=1, metadata={"help": "Number of frames to use in the question (should be <= num_hist_traj)"})
     max_scenes: int = field(default=None)
     data_type: str = field(default="mini")
 
@@ -143,6 +144,7 @@ def main():
     num_fut_traj = data_args.num_fut_traj
     num_hist_frames = data_args.num_hist_frames
     data_type = data_args.data_type
+    max_scenes = data_args.max_scenes
 
     # vis
     vis_path = Path(data_args.vis_path)
@@ -168,7 +170,8 @@ def main():
         data_root=navsim_root,
         num_hist_frame=num_hist_traj,
         num_fut_frame=num_fut_traj,
-        data_type=data_type
+        data_type=data_type,
+        max_scenes=max_scenes
     )
 
     torch_dtype = pick_dtype(model_args.torch_dtype)
@@ -209,7 +212,7 @@ def main():
         navigation_info, _ = get_history_navigation_infomation(scene)
         object_position_info = get_object_position(scene)
         # scene_images = get_camera_images(scene, image_root=image_root) # shape:(camera, frames)
-        obs_images = get_camera_images(scene, image_root=obs_root, frame_num=num_hist_traj) # shape:(camera, frames)
+        # obs_images = get_camera_images(scene, image_root=obs_root, frame_num=num_hist_traj) # shape:(camera, frames)
         image_for_save = get_camera_images(scene, image_root=obs_root, frame_num=num_hist_frames)
         full_image_paths = []
         for camera_images in image_for_save:
@@ -220,10 +223,9 @@ def main():
             model=model,
             processor=processor,
             camera_order=data_args.camera_order,
-            multi_frame_paths=obs_images,
+            multi_frame_paths=image_for_save,     # obs_images
             navigation_info=navigation_info,
             object_position_info=object_position_info,
-
         )
 
         input_Q = (
