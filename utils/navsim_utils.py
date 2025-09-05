@@ -160,6 +160,18 @@ def to_traj_string(traj: list[tuple[float, float]]) -> str:
     return "; ".join(f"({x:.2f}, {y:.2f})" for x, y in traj)
 
 
+def get_ego_status(scene:Scene):
+    start_frame_idx = scene.scene_metadata.num_history_frames - 1
+    current_frame_ego_status = scene.frames[start_frame_idx].ego_status
+    info = [
+        f"ego_pose: {current_frame_ego_status.ego_pose}",
+        f"ego_velocity: {current_frame_ego_status.ego_velocity}",
+        f"ego_accelerate: {current_frame_ego_status.ego_acceleration}",
+        f"ego_"
+    ]
+    return current_frame_ego_status
+
+
 def get_history_future_trajs(scene:Scene):
     history_traj = scene.get_history_trajectory()
     history_traj = np.array([(pose[0], pose[1]) for pose in history_traj.poses])

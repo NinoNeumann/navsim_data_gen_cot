@@ -4,6 +4,8 @@ from PIL import Image
 import torch
 import numpy as np
 import navsim.common.file_ops as fops 
+from utils.vis_utils import save_text
+from utils.qwen_utils_v2 import summarize_across_views_v2
 
 
 def resize(img, target_size=28):
@@ -36,22 +38,25 @@ def ask_camera_view(
     frame_paths: List[str],
     model,
     processor,
+    min_pixels,
+    max_pixels,
+    max_token_qwen,
 ) -> Dict[str, str]:
     """
-    Ask three multi-turn questions about a specific camera view with 4 frames.
-
-    - view_name: e.g., "front", "front-right", ...
-    - frame_paths: list of 4 image file paths for this view
-
-    Returns a dict with keys: "environment", "key_objects", "decision_notes".
+    Ask three concise, multi-turn questions about a specific camera view with N frames.
+    Returns: dict with keys: "environment", "key_objects", "decision_notes".
     """
-    
 
+    # ---- 仅用 prompt 约束简短，不做截断 ----
     system_prompt = (
-        "You are an intelligent driving vision understanding assistant. Please analyze the four frames of images "
-        "from this perspective based on facts, providing clear and concise analysis. Avoid excessive adjectives in descriptions. "
-        "IMPORTANT: When describing traffic-related objects (vehicles, pedestrians, traffic signs, traffic lights, road markings, etc.), "
-        "always wrap them with <obj></obj> tags. For example: <obj>car</obj>, <obj>traffic light</obj>, <obj>pedestrian</obj>."
+        "You are an intelligent driving vision understanding assistant. Respond briefly and factually.\n"
+        "- Keep all answers concise and to-the-point.\n"
+        "- Avoid redundancy and flowery adjectives.\n"
+        "- Use simple sentences.\n"
+        "- Hard length rules (do not exceed):\n"
+        "  * Q1 (environment): max 2 short sentences, max ~40 words total.\n"
+        "  * Q2 (key objects): max 5 bullets; each bullet <= 8 words; start each bullet with.\n"
+        "- Output plain text only (no markdown headings)."
     )
 
     # Build images
@@ -60,28 +65,26 @@ def ask_camera_view(
         if not fops.exists(img_path):
             raise FileNotFoundError(f"Image not found: {img_path}")
         img = fops.image_open(img_path).convert("RGB")
-        # print(img.size)
-        # img = resize(img)
-        # print(img.size)
         pil_images.append(img)
 
-    min_pixels = 256 * 28 * 28
-    max_pixels = 1280 * 28 * 28
+    # 像素预算（如需要可在外部传入覆盖）
+    min_pixels = 256 * 28 * 28 if min_pixels is None else min_pixels
+    max_pixels = 1280 * 28 * 28 if max_pixels is None else max_pixels
+
     messages = [
-        {"role": "system", "content": [{"type": "text", "text": system_prompt}]},
         {
             "role": "user",
             "content": (
-                [{"type": "text", "text": f"View: {view_name}. These are 4 frames from this perspective."}]
-                + [{"type": "image", "image": img, "min_pixels":min_pixels, "max_pixels":max_pixels} for img in pil_images]
-                + [{"type": "text", "text": "Question 1: Describe the environment around the vehicle, avoid using excessive adjectives."}]
+                [{"type": "text", "text": f"View: {view_name}. These are frames from this perspective."}]
+                + [{"type": "image", "image": img, "min_pixels": min_pixels, "max_pixels": max_pixels} for img in pil_images]
+                + [{"type": "text", "text":system_prompt}]
             ),
         },
     ]
 
-    def _generate(current_messages: List[Dict[str, Any]], max_new_tokens: int = 512) -> str:
+    def _generate(current_messages: List[Dict[str, Any]], max_new_tokens: int) -> str:
         text = processor.apply_chat_template(current_messages, add_generation_prompt=True)
-        inputs = processor(text=[text], images=pil_images, return_tensors="pt")
+        inputs = processor(text=[text], images=pil_images, return_tensors="pt").to(model.device)
         with torch.no_grad():
             output_ids = model.generate(
                 **inputs,
@@ -94,24 +97,12 @@ def ask_camera_view(
         out = processor.batch_decode(generated, skip_special_tokens=True)[0]
         return out.strip()
 
-    # Q1
-    env_answer = _generate(messages)
-
-    # Q2 follow-up
-    messages.append({"role": "assistant", "content": [{"type": "text", "text": env_answer}]})
-    messages.append({"role": "user", "content": [{"type": "text", "text": "Question 2: Describe the key objects."}]})
-    obj_answer = _generate(messages)
-
-    # Q3 follow-up
-    messages.append({"role": "assistant", "content": [{"type": "text", "text": obj_answer}]})
-    messages.append({"role": "user", "content": [{"type": "text", "text": "Question 3: Analyze what the vehicle should pay attention to when making decisions in this camera view."}]})
-    decision_answer = _generate(messages)
-
+    # all answer
+    env_answer = _generate(messages, max_token_qwen)
     return {
-        "environment": env_answer,
-        "key_objects": obj_answer,
-        "decision_notes": decision_answer,
+        "answer": env_answer,
     }
+
 
 
 def summarize_across_views(
@@ -120,9 +111,10 @@ def summarize_across_views(
     processor,
     navigation_info,
     object_position_info,
+    max_token_qwen,
 ) -> str:
     """
-    Aggregate six-view answers and ask model for a final combined response
+    Aggregate eight-view answers and ask model for a final combined response
     to the three questions (environment, key objects, decision notes).
     """
     
@@ -141,6 +133,12 @@ def summarize_across_views(
             
             # 根据相对位置描述方向
             x, y = rel_pos
+
+            # 将坐标保留两位小数
+            x_fmt = f"{float(x):.2f}"
+            y_fmt = f"{float(y):.2f}"
+            pos_str = f"({x_fmt}, {y_fmt})"
+
             if abs(x) < 2 and abs(y) < 2:
                 direction = "very close"
             elif x > 0 and y > 0:
@@ -160,36 +158,56 @@ def summarize_across_views(
             else:
                 direction = "left"
             
-            object_position_text += f"- <obj>{name}</obj>: {direction}, distance {distance:.1f}m, position {rel_pos}, heading {heading_deg:.1f}°\n"
+            object_position_text += f"- <obj>{name}</obj>: {direction}, distance {distance:.1f}m, position {pos_str}, heading {heading_deg:.1f}°\n"
     
-    system_prompt = (
-    "You are a visual summarization assistant in the field of intelligent driving. Now providing answers from six perspectives "
-    "in three categories: (1) Environment description, (2) Key objects, (3) Decision points. "
-    f"The navigation information is: {navigation_info}"
-    f"{object_position_text}"
-    "Please synthesize them comprehensively, avoid repetition and redundancy, and output the final three sections:\n"
-    "1. Environment description (concise, fact-based)\n"
-    "2. Key objects (condensed by category or priority, incorporating position information)\n"
-    "3. Decision (make driving decisions by considering information from all previous camera views and navigation; "
-    "   provide a reasonable driving decision along with a brief explanation of the reasoning)\n\n"
-    "IMPORTANT GENERAL TAGGING: When describing traffic-related objects (vehicles, pedestrians, traffic signs, traffic lights, road markings, etc.), "
-    "always wrap them with <obj></obj> tags. For example: <obj>car</obj>, <obj>traffic light</obj>, <obj>pedestrian</obj>.\n\n"
-    "STRICT TAGGING & COORD APPEND RULES:\n"
-    "- For every object that appears in the 'Object positions relative to ego vehicle (BEV perspective)' list above (i.e., in the provided object_position_text), "
-    "  whenever you mention that object in your final output, you MUST:\n"
-    "  (1) Wrap the exact noun with <obj></obj> (e.g., <obj>bus</obj>), AND\n"
-    "  (2) Immediately append its coordinate tuple as '(x, y)' using EXACTLY the 'position' shown above (no rounding, no reordering, no additional units),\n"
-    "      e.g., <obj>bus</obj>(12.4, -3.1). The numbers and sign must match the 'position' field verbatim.\n"
-    "- If you mention an object that does NOT appear in the positions list, still tag it with <obj></obj> but DO NOT append any coordinates.\n"
-    "- Do NOT invent, alter, or infer new coordinates. Use only the 'position' tuple provided above.\n"
-    "- When you summarize by category or priority, keep each listed object's coordinates right after its tag the first time it appears in that line.\n"
-    "- If the same object is repeated within a sentence/line, append the coordinates only once at its first mention in that sentence/line.\n"
-    "- Preserve the tuple order as '(x, y)'; do not swap axes and do not change precision.\n\n"
-    "OUTPUT STYLE:\n"
-    "- Keep statements factual and concise; avoid flowery adjectives.\n"
-    "- Use bullet points for 'Key objects' where helpful; each bullet may group objects by category/priority, but ensure the tagging and coordinate rules are followed.\n"
-    "- Do not duplicate information across sections; put object-level details in 'Key objects' and strategy in 'Decision points'."
-)
+    system_prompt = system_prompt = f"""
+        You are a visual summarization assistant for intelligent driving. You will synthesize answers from EIGHT camera views,
+        given the navigation information and object positions.
+
+        Navigation: {navigation_info}
+        {object_position_text}
+
+        YOUR OUTPUT MUST FOLLOW EXACTLY THESE THREE MARKDOWN SECTIONS:
+
+        ### 1. Environment Description
+        Write ONE brief paragraph that fuses information across all views (no per-view listing).
+        Include core traffic context (road type/layout such as lanes/intersections, traffic density/flow, control status like traffic lights/signs,
+        special conditions such as weather/visibility/roadworks). Be factual and concise.
+        In this paragraph, TAG all traffic-related nouns with <obj></obj>. 
+        If a mentioned object exists in the positions list above, include its coordinates INSIDE the tag as <obj>name(x, y)</obj>
+        (copy the tuple EXACTLY from the positions list); otherwise tag WITHOUT parentheses.
+
+        ### 2. Key Objects
+        Describe briefly ONLY the objects that appear in the positions list above. 
+        For each mentioned object, follow the tagging rule <obj>name(x, y)</obj> and add a short factual note (e.g., role/state/risk/direction/proximity).
+        Keep it concise and avoid repetition.
+
+        ### 3. Decision
+        Make a reasonable driving decision by considering the fused multi-view information and navigation.
+        Give ONE brief justification. In this section, TAG all traffic-related nouns with <obj></obj>, and
+        if a noun corresponds to an object in the positions list, use <obj>name(x, y)</obj> with the exact coordinates.
+
+        MANDATORY TAGGING RULES (APPLY TO ALL SECTIONS):
+        - Objects present in the positions list (i.e., in the "Object positions relative to ego vehicle" above):
+        ALWAYS tag as <obj>name(x, y)</obj> whenever mentioned, anywhere in the output.
+        Use the canonical 'name' as written in the positions list and copy the 'position' tuple EXACTLY (no rounding, no reordering, no units).
+        - Traffic-related nouns NOT in the positions list must still be tagged but WITHOUT coordinates, e.g., <obj>lanes</obj>, <obj>crosswalk</obj>, <obj>traffic light</obj>.
+        - NEVER output placeholders like "(x, y)" or "(X, Y)". If coordinates are unavailable, output <obj>name</obj> with NO parentheses.
+        - If the same canonical object appears multiple times in the positions list with different coordinates, treat each instance separately and
+        tag with its own coordinates when referenced.
+        - When an object is repeated within the same bullet/line, include coordinates only at the first mention on that line.
+
+        STYLE:
+        - Be concise, factual, and avoid flowery language.
+        - Do NOT enumerate per view. Fuse information.
+        - Use the exact Markdown headings shown above.
+        - Distances/directions may be taken from the provided info (e.g., “front-right”, “6.5m away”), but do NOT invent coordinates.
+
+        SELF-CHECK BEFORE FINALIZING:
+        - Every mention of any object that appears in the positions list is tagged as <obj>name(x, y)</obj> with the EXACT tuple from the list.
+        - No placeholder coordinates remain. 
+        - Traffic-related nouns not in the positions list are tagged as <obj>…</obj> WITHOUT parentheses.
+        """
 
 
     # Build a single user message that lists per-view answers
@@ -212,7 +230,7 @@ def summarize_across_views(
             do_sample=True,
             top_p=0.8,
             temperature=0.2,
-            max_new_tokens=768,
+            max_new_tokens=max_token_qwen,
         )
     generated = output_ids[:, inputs["input_ids"].shape[1]:]
     out = processor.batch_decode(generated, skip_special_tokens=True)[0]
@@ -236,23 +254,43 @@ def get_mulit_dialogs(
         multi_frame_paths,
         navigation_info,
         object_position_info,
+        min_pixels,
+        max_pixels,
+        max_token_qwen:int = 512,
 ):
     answers_by_view: Dict[str, Dict[str, str]] = {}
 
     for frame_paths, camera_type in zip(multi_frame_paths, camera_order):
-        result = ask_camera_view(camera_type, frame_paths, model=model, processor=processor)
+        result = ask_camera_view(
+            camera_type, 
+            frame_paths, 
+            model=model, 
+            processor=processor, 
+            min_pixels=min_pixels, 
+            max_pixels=max_pixels,
+            max_token_qwen=max_token_qwen,
+        )
         answers_by_view[camera_type] = result
     
-    # debug info
-    print(f"=======view:{camera_type}=======")
-    print(f"Environment description: {result['environment']}")
-    print(f"Key objects: {result['key_objects']}")
-    print(f"Decision points: {result['decision_notes']}")
-    print(f"=================================")
+        # debug info
+        print(f"=======view:{camera_type}=======")
+        print(f"Environment description: {result['environment']}")
+        print(f"Key objects: {result['key_objects']}")
+        print(f"Decision points: {result['decision_notes']}")
+        print(f"=================================")
 
     if answers_by_view:
-        summary = summarize_across_views(answers_by_view, model, processor, navigation_info, object_position_info)
+        summary, system_prompt = summarize_across_views_v2(
+            answers_by_view, 
+            model, 
+            processor, 
+            navigation_info, 
+            object_position_info,
+            max_token_qwen,
+        )
         print(f"Summary: {summary}")
+    
+    save_text("./system_prompt.txt", system_prompt)
     
     return summary, answers_by_view
 

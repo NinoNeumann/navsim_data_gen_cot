@@ -16,7 +16,8 @@ from utils.navsim_utils import (
     to_traj_string,
     get_history_future_trajs,
     get_history_navigation_infomation,
-    get_object_position
+    get_object_position,
+    get_ego_status,
 
 )
 
@@ -43,6 +44,8 @@ from qwen_vl_utils import process_vision_info
 
 import navsim.common.file_ops as fops
 import moxing as mox
+
+torch.npu.config.allow_internal_format = False
 # =========================
 # Dataclass Args
 # =========================
@@ -69,6 +72,7 @@ class ModelArguments:
         default=1280,
         metadata={"help": "Generation length for the model."},
     )
+
 
 
 @dataclass
@@ -101,7 +105,8 @@ class DataArguments:
     max_scenes: int = field(default=None)
     data_type: str = field(default="mini")
 
-    image_root: str = field(default="./images")
+    frame_interval: int = field(default=None)
+
     obs_root: str = field(default="obs://yw-2030-extern/Partner_Zhu/navsim/navsim-data")
 
     vis_path: str = field(default="./visual")
@@ -131,12 +136,16 @@ def main():
     world = int(data_args.world_size)
     assert 0 <= rank < world, f"rank_idx must be in [0, {world-1}], got {rank}"
 
-    model_path = Path(model_args.model_path)
+    
     out_path = Path(data_args.out_dir)
 
     # processor
     min_pixels = data_args.min_pixels
     max_pixels = data_args.max_pixels
+
+    # qwen setting
+    model_path = Path(model_args.model_path)
+    max_new_tokens = model_args.max_new_tokens
 
     # navsim
     navsim_root = data_args.nav_root
@@ -145,13 +154,13 @@ def main():
     num_hist_frames = data_args.num_hist_frames
     data_type = data_args.data_type
     max_scenes = data_args.max_scenes
+    frame_interval = data_args.frame_interval
 
     # vis
     vis_path = Path(data_args.vis_path)
     if_vis = data_args.if_vis
 
     # path prefix
-    image_root = Path(data_args.image_root)
     obs_root = data_args.obs_root
 
     # Validate num_hist_frames
@@ -171,7 +180,8 @@ def main():
         num_hist_frame=num_hist_traj,
         num_fut_frame=num_fut_traj,
         data_type=data_type,
-        max_scenes=max_scenes
+        max_scenes=max_scenes,
+        frame_interval=frame_interval
     )
 
     torch_dtype = pick_dtype(model_args.torch_dtype)
@@ -211,6 +221,7 @@ def main():
         hist_traj, fut_traj = get_history_future_trajs(scene)
         navigation_info, _ = get_history_navigation_infomation(scene)
         object_position_info = get_object_position(scene)
+        # ego_status_info = get_ego_status(scene)
         # scene_images = get_camera_images(scene, image_root=image_root) # shape:(camera, frames)
         # obs_images = get_camera_images(scene, image_root=obs_root, frame_num=num_hist_traj) # shape:(camera, frames)
         image_for_save = get_camera_images(scene, image_root=obs_root, frame_num=num_hist_frames)
@@ -226,10 +237,13 @@ def main():
             multi_frame_paths=image_for_save,     # obs_images
             navigation_info=navigation_info,
             object_position_info=object_position_info,
+            min_pixels=min_pixels,
+            max_pixels=max_pixels,
+            max_token_qwen=max_new_tokens,
         )
 
         input_Q = (
-            f"Here are {len(data_args.camera_order)} consecutive frames of 6 surrounding onboard camera views from a vehicle:\n"
+            f"Here are  1 frames of {len(data_args.camera_order)} surrounding onboard camera views from a vehicle:\n"
             f"Front camera: {[f'frame{i}<image>' for i in range(num_hist_frames)]}"
             f"Front Left camera: {[f'frame{i}<image>' for i in range(num_hist_frames)]}"
             f"Front Right camera: {[f'frame{i}<image>' for i in range(num_hist_frames)]}"
@@ -240,7 +254,8 @@ def main():
             f"Back Right camera: {[f'frame{i}<image>' for i in range(num_hist_frames)]}"
             f"\nThe navigation information is: {navigation_info}"
             f"\nThe history trajectory is: {to_traj_string(hist_traj)}"
-            f"Predict the optimal driving action for the next 4 seconds with 8 new waypoints."
+            f"\nThe ego status infomation is :{get_ego_status()}"
+            f"Predict the optimal driving action for the next 12 seconds with 24 new waypoints."
         )
         output_A = (
             f"<think>{output_text}</think><trajectory>{to_traj_string(fut_traj)}</trajectory>"

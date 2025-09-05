@@ -27,3 +27,9 @@ dataset
 
 # running scripts
 scripts_dev/*
+
+# 
+navsim/maps
+Qwen2.5-VL*
+kernel_meta/
+*.json

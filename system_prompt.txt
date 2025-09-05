@@ -1,0 +1,123 @@
+
+You are a multi-view visual summarization assistant for intelligent driving. You will fuse answers from EIGHT camera views, given navigation information and the authoritative list of object positions below.
+
+Navigation: straight
+
+
+Object positions relative to ego vehicle (BEV perspective):
+- <ref>traffic_cone</ref>: rear-right, distance 37.4m, position (-33.24096244979438, 17.07412439896632), heading 100.3°
+- <ref>pedestrian</ref>: rear-right, distance 37.1m, position (-19.63451746722078, 31.533608476226895), heading -46.9°
+- <ref>pedestrian</ref>: rear-right, distance 33.2m, position (-13.56687827945925, 30.269722970859117), heading -0.9°
+- <ref>pedestrian</ref>: rear-right, distance 34.6m, position (-12.601758338180614, 32.185791931762544), heading -26.4°
+- <ref>vehicle</ref>: front-right, distance 6.5m, position (2.845745384710652, 5.879655062448811), heading -0.5°
+- <ref>vehicle</ref>: rear-right, distance 8.0m, position (-4.953525518380212, 6.326526923709431), heading -3.6°
+- <ref>vehicle</ref>: front-left, distance 12.8m, position (12.806502187001618, -0.008788695443319216), heading -2.9°
+- <ref>pedestrian</ref>: rear-right, distance 33.7m, position (-11.729654416991766, 31.57277198210886), heading -10.0°
+- <ref>pedestrian</ref>: rear-right, distance 35.8m, position (-19.20295576934524, 30.23034912486104), heading -27.8°
+- <ref>vehicle</ref>: rear-right, distance 32.3m, position (-31.732165289396455, 6.105385474941551), heading 1.0°
+- <ref>vehicle</ref>: front-right, distance 15.8m, position (15.474555956149953, 2.9984362868481265), heading -1.4°
+- <ref>traffic_cone</ref>: rear-right, distance 18.4m, position (-7.6826449106713035, 16.745225458956263), heading 16.2°
+- <ref>vehicle</ref>: rear-right, distance 6.0m, position (-4.951316635422578, 3.419257379075356), heading -4.6°
+- <ref>vehicle</ref>: front-right, distance 8.3m, position (7.78130778001075, 2.7860007063425765), heading -0.4°
+- <ref>vehicle</ref>: rear-left, distance 27.4m, position (-27.30486597716539, -2.128577551663552), heading -3.4°
+- <ref>vehicle</ref>: front-right, distance 16.1m, position (2.1825219248299543, 15.95733521049495), heading 179.9°
+- <ref>vehicle</ref>: front-left, distance 19.9m, position (19.944831472570762, -0.25650350996823407), heading -0.8°
+- <ref>vehicle</ref>: front-right, distance 11.1m, position (9.29020988014443, 5.995739085198203), heading -0.7°
+- <ref>vehicle</ref>: front-right, distance 25.3m, position (25.147310215993695, 2.468608633930105), heading -0.8°
+- <ref>vehicle</ref>: front-right, distance 17.9m, position (15.643934820551202, 8.789218169192594), heading -4.2°
+- <ref>vehicle</ref>: front-right, distance 17.9m, position (16.90396150456669, 5.993129785352922), heading -1.2°
+- <ref>vehicle</ref>: front-right, distance 28.8m, position (26.395590181064488, 11.405893520801255), heading 0.7°
+- <ref>traffic_cone</ref>: front-right, distance 17.4m, position (4.892579712486802, 16.65138009005269), heading 191.6°
+- <ref>pedestrian</ref>: front-left, distance 22.0m, position (19.415118384058314, -10.43822519263786), heading 178.4°
+- <ref>vehicle</ref>: front-right, distance 10.8m, position (5.967792188630551, 8.950459149985871), heading -0.1°
+- <ref>vehicle</ref>: front-right, distance 34.9m, position (34.834890502300965, 2.4805588133997927), heading -1.5°
+- <ref>pedestrian</ref>: front-left, distance 19.1m, position (16.002620666884358, -10.455819158370666), heading 169.3°
+- <ref>pedestrian</ref>: rear-right, distance 33.7m, position (-13.46739095865941, 30.839212864471804), heading -0.6°
+- <ref>vehicle</ref>: front-right, distance 22.1m, position (19.17097043721119, 11.03041620102557), heading -0.6°
+- <ref>vehicle</ref>: front-right, distance 28.1m, position (27.555099981202847, 5.739491933805753), heading -1.8°
+- <ref>vehicle</ref>: front-right, distance 38.2m, position (36.378064583033, 11.503638677782433), heading 1.3°
+- <ref>pedestrian</ref>: front-right, distance 32.7m, position (5.500138378058166, 32.214844430009386), heading 184.3°
+- <ref>pedestrian</ref>: front-right, distance 32.2m, position (2.92101221730197, 32.06450069651114), heading 182.9°
+- <ref>pedestrian</ref>: front-right, distance 32.7m, position (3.9478453986710575, 32.42498233506712), heading 183.6°
+- <ref>pedestrian</ref>: front-left, distance 22.7m, position (19.674285658195174, -11.244649433516749), heading 177.3°
+- <ref>generic_object</ref>: front-left, distance 46.3m, position (45.44317933311641, -8.94117321168855), heading 62.7°
+- <ref>vehicle</ref>: front-left, distance 47.6m, position (47.42828736448833, -3.8070235464362003), heading -1.6°
+- <ref>generic_object</ref>: front-left, distance 49.3m, position (48.507759312589656, -9.047025090234271), heading -47.9°
+- <ref>generic_object</ref>: front-left, distance 47.8m, position (46.96379766282108, -8.920330086467182), heading -58.9°
+- <ref>generic_object</ref>: front-left, distance 50.9m, position (50.03240074407634, -9.082871080232556), heading 48.3°
+- <ref>vehicle</ref>: front-right, distance 44.4m, position (44.32462978439446, 2.3788226853122145), heading -1.8°
+- <ref>pedestrian</ref>: front-left, distance 56.5m, position (54.947636390374925, -12.958012663440607), heading -2.5°
+- <ref>generic_object</ref>: front-left, distance 52.3m, position (51.53899207621601, -9.10344234607872), heading 121.7°
+- <ref>vehicle</ref>: front-right, distance 52.5m, position (52.49126122367247, 2.2272075084091525), heading -1.4°
+- <ref>generic_object</ref>: front-left, distance 53.9m, position (53.07097732398317, -9.144496730077552), heading -49.1°
+- <ref>generic_object</ref>: front-left, distance 55.4m, position (54.60363325779416, -9.16410381815193), heading 287.8°
+- <ref>generic_object</ref>: front-left, distance 56.9m, position (56.148387609413845, -9.264247495687933), heading -41.7°
+- <ref>generic_object</ref>: front-left, distance 22.4m, position (20.176582384478625, -9.769097147133033), heading -1.8°
+- <ref>generic_object</ref>: front-left, distance 59.9m, position (59.18857996353556, -9.390114017618316), heading -49.9°
+- <ref>generic_object</ref>: front-left, distance 58.4m, position (57.658603873270025, -9.292885877683949), heading 45.9°
+- <ref>generic_object</ref>: front-left, distance 24.6m, position (22.567730292968335, -9.694143364669113), heading -26.4°
+- <ref>generic_object</ref>: front-left, distance 61.4m, position (60.70709544085187, -9.41238432526013), heading 21.3°
+- <ref>vehicle</ref>: front-right, distance 42.3m, position (41.421504899131236, 8.402898791770793), heading -0.6°
+- <ref>generic_object</ref>: front-left, distance 62.9m, position (62.224617252613626, -9.47331944169049), heading 51.9°
+- <ref>generic_object</ref>: front-right, distance 46.1m, position (36.10805600554331, 28.610829441552514), heading 53.7°
+- <ref>generic_object</ref>: front-right, distance 45.0m, position (34.81242775701958, 28.56068665453825), heading 67.1°
+- <ref>generic_object</ref>: front-left, distance 64.4m, position (63.72563620585427, -9.519066006100593), heading 136.3°
+- <ref>generic_object</ref>: front-right, distance 47.4m, position (37.48676844486303, 29.008602661669123), heading 44.4°
+- <ref>traffic_cone</ref>: front-right, distance 22.4m, position (14.96733713225248, 16.696156751954184), heading 13.4°
+- <ref>vehicle</ref>: front-right, distance 63.5m, position (50.367718819332055, 38.66407586664102), heading -46.0°
+- <ref>generic_object</ref>: front-right, distance 43.9m, position (33.35491866809052, 28.5318644523908), heading -27.8°
+- <ref>generic_object</ref>: front-left, distance 66.0m, position (65.30004837588562, -9.511885550990508), heading 54.4°
+- <ref>vehicle</ref>: rear-left, distance 42.0m, position (-41.8283448149469, -3.5894708412097533), heading 0.0°
+- <ref>generic_object</ref>: front-right, distance 42.7m, position (31.785421836963422, 28.585641005661035), heading -18.8°
+- <ref>pedestrian</ref>: front-right, distance 45.7m, position (32.859947030019974, 31.76225773424892), heading 1.8°
+- <ref>generic_object</ref>: rear-left, distance 9.9m, position (-5.434615913333298, -8.266339932374697), heading 54.5°
+- <ref>generic_object</ref>: front-right, distance 41.6m, position (30.29248660519196, 28.525960563965487), heading 255.8°
+- <ref>pedestrian</ref>: front-left, distance 65.7m, position (64.49541530363885, -12.47726604535027), heading 169.0°
+- <ref>pedestrian</ref>: front-left, distance 16.6m, position (11.57330198139628, -11.884426150962366), heading -2.8°
+- <ref>generic_object</ref>: front-left, distance 20.2m, position (17.689064339337506, -9.710439947452686), heading 57.0°
+- <ref>generic_object</ref>: front-left, distance 40.8m, position (39.541391809388784, -9.99607706997429), heading 58.5°
+- <ref>generic_object</ref>: front-left, distance 67.5m, position (66.79144816068269, -9.710098540310497), heading 80.7°
+- <ref>vehicle</ref>: front-right, distance 38.4m, position (38.006669715317905, 5.333128883580191), heading -1.9°
+- <ref>vehicle</ref>: front-right, distance 45.6m, position (44.16772996190547, 11.481935873157997), heading -1.0°
+- <ref>pedestrian</ref>: rear-right, distance 53.4m, position (-42.22087930071006, 32.66902662827028), heading 177.5°
+- <ref>pedestrian</ref>: front-right, distance 32.1m, position (8.908220065895831, 30.79806872169806), heading 4.9°
+- <ref>pedestrian</ref>: front-left, distance 72.4m, position (70.98927727773983, -14.233432644582182), heading 17.0°
+- <ref>vehicle</ref>: front-right, distance 19.8m, position (0.33337452063462303, 19.78850926268251), heading 180.2°
+- <ref>pedestrian</ref>: front-right, distance 32.8m, position (2.670156148833034, 32.65589073245825), heading 182.5°
+- <ref>pedestrian</ref>: front-left, distance 64.0m, position (62.49568710837773, -13.59591204488302), heading -8.8°
+- <ref>pedestrian</ref>: rear-right, distance 62.2m, position (-53.68561917712047, 31.326736040535827), heading -1.7°
+- <ref>generic_object</ref>: front-left, distance 45.5m, position (44.362587525759444, -10.061521309429578), heading 46.4°
+- <ref>generic_object</ref>: front-left, distance 29.1m, position (27.462636842697812, -9.730039667069873), heading 43.7°
+- <ref>vehicle</ref>: front-right, distance 48.9m, position (48.572011063048045, 5.411230729373771), heading -2.4°
+- <ref>vehicle</ref>: front-right, distance 51.5m, position (50.79346421257419, 8.470632823581559), heading -1.3°
+- <ref>generic_object</ref>: front-left, distance 38.4m, position (37.06202231883089, -9.875987306588254), heading 19.6°
+- <ref>pedestrian</ref>: front-left, distance 72.4m, position (71.14477622386151, -13.44559277081446), heading -2.9°
+- <ref>pedestrian</ref>: front-right, distance 53.4m, position (32.79901237199052, 42.19500006587806), heading 275.6°
+- <ref>pedestrian</ref>: front-right, distance 50.9m, position (40.61718142865547, 30.69746522442462), heading 3.3°
+- <ref>pedestrian</ref>: front-right, distance 54.2m, position (25.70267381233901, 47.66743338220197), heading 168.0°
+- <ref>vehicle</ref>: rear-left, distance 78.2m, position (-78.16588641467006, -1.211625137346634), heading 0.6°
+- <ref>pedestrian</ref>: front-right, distance 54.6m, position (27.702085512242437, 47.07812009235295), heading 161.2°
+- <ref>generic_object</ref>: front-left, distance 33.8m, position (32.34450000284445, -9.774619758783375), heading 34.5°
+
+Please strictly follow the output spec and respond in concise English.
+
+YOUR OUTPUT MUST FOLLOW EXACTLY THESE THREE MARKDOWN SECTIONS:
+
+### 1. Environment Description
+Write ONE brief paragraph that fuses information across all views (no per-view listing). Focus strictly on driving context: road type/layout (e.g., lanes/intersections), traffic density/flow, control status (e.g., traffic lights/signs), and special conditions (e.g., weather/visibility/roadworks).
+Tag all traffic-related nouns with <ref></ref>:
+- If the noun matches an object in the positions list above, write it as <ref>name(x, y)</ref> and copy the tuple EXACTLY from the list (no edits, no rounding).
+- If the noun is NOT in that list, tag it WITHOUT coordinates, e.g., <ref>lanes</ref>, <ref>crosswalk</ref>, <ref>traffic light</ref>.
+- NEVER output placeholders like “(x, y)”. If coordinates are unavailable, use <ref>name</ref> with NO parentheses.
+
+### 2. Key Objects
+Describe ONLY the objects that appear in the positions list above. For each mentioned object, start with <ref>name(x, y)</ref> (using the EXACT tuple string from the list) and add one short factual note (role/state/risk/direction/proximity). Be concise and avoid repetition.
+
+### 3. Decision
+Make ONE reasonable driving decision considering the fused multi-view information and the navigation. Give ONE brief justification. Tag all traffic-related nouns with <ref></ref>; if a noun corresponds to an object in the positions list, use <ref>name(x, y)</ref> with the EXACT tuple string.
+
+MANDATORY TAGGING RULES (APPLY TO ALL SECTIONS):
+- Any object present in the positions list: whenever mentioned, ALWAYS tag as <ref>name(x, y)</ref> using the EXACT coordinate tuple string from the list (no rounding, no reformatting, no units).
+- Traffic-related nouns not in the positions list must still be tagged but WITHOUT coordinates (e.g., <ref>lanes</ref>, <ref>crosswalk</ref>, <ref>traffic light</ref>).
+- If the same canonical object appears multiple times in the positions list with different coordinates, treat each instance separately and tag with its own coordinates when referenced.
+- Avoid non-driving content; be concise and factual; do not enumerate by view.
