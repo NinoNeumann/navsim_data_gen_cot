@@ -10,6 +10,7 @@ obs_path = "Partner_Zhu/models"
 a = "obs://yw-2030-extern/Partner_Zhu/code/navsim_cot_gen/navsim/maps"
 b = "/home/ma-user/work/navsim/maps"
 mox.file.copy_parallel(b,a)
+mox.file.remove
 
 c = "obs://yw-2030-extern/Partner_Zhu/code/navsim_cot_gen/code"
 d = "/home/ma-user/work/navsim_data_gen_cot"
